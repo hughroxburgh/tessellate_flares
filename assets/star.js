@@ -53,7 +53,8 @@
          `${fmt(S.contam, 2)} <span class="sub">(neighbours / star, 3&times;3 px)</span>`) +
     stat('Variable-star catalogue', S.var_type && S.var_type !== '-' ? TF.esc(S.var_type) : 'none') +
     `<p class="sec">TESSELLATE</p>` +
-    stat('Sectors (camera/CCD)', S.sectors.map(s => s.cam == null ? `${s.s}` : `${s.s} <span class="sub">(${s.cam}/${s.ccd})</span>`).join(', ')) +
+    stat('Sectors <span class="sub">(camera/CCD, cut, objid)</span>', S.sectors.map(s => s.cam == null ? `${s.s}` :
+      `${s.s} <span class="sub">(${s.cam}/${s.ccd}, cut ${s.cut}${s.obj && s.obj.length ? `, obj ${s.obj.join('/')}` : ''})</span>`).join('<br>')) +
     stat('Observing time', `${fmt(S.obs_days, 1)} d`) +
     stat('Flares', `${EV.length} <span class="sub">(${EV.filter(e => e.tier === 'gold').length} gold)</span>`) +
     stat('Flare rate', `${fmt(S.rate, 3)} per day`) +
@@ -139,10 +140,18 @@
   const FONT = '11px "IBM Plex Mono", ui-monospace, monospace', LFONT = '12px "IBM Plex Sans", system-ui, sans-serif';
   const axis = (label, size) => ({label, labelSize: 20, labelFont: LFONT, font: FONT, size, stroke: C('--text-dim'),
     grid: {stroke: C('--hairline'), width: 1}, ticks: {stroke: C('--panel-border'), width: 1}});
-  const v1 = (u, v) => v == null ? '—' : v.toFixed(1);
   const clip = u => { const b = u.bbox; u.ctx.beginPath(); u.ctx.rect(b.left, b.top, b.width, b.height); u.ctx.clip(); };
   // time-only zoom: no horizontal cursor line, drag selects a time range and the flux axis rescales itself
   const CURSOR = () => ({y: false, drag: {x: true, y: false}, points: {size: 6}});   // fresh object per chart
+  // cursor position as a small (t, f) readout in the chart's bottom-right corner (instead of uPlot's legend)
+  function readout(el, text) {
+    let r = el.querySelector('.readout');
+    if (!r) { r = document.createElement('div'); r.className = 'readout'; el.appendChild(r); }
+    return u => {
+      const {left, top} = u.cursor;
+      r.textContent = left == null || left < 0 || top == null || top < 0 ? '' : text(u.posToVal(left, 'x'), u.posToVal(top, 'y'));
+    };
+  }
 
   // ---------------- views: one sector, or all sectors end to end ----------------
   // A view maps real time (MJD) to a plot coordinate. One sector: identity. All sectors: each sector keeps its own
@@ -262,14 +271,13 @@
       width: el.clientWidth, height: 300,
       scales: {x: {time: false}},
       axes: [timeAxis(V), axis(resid ? 'flux − baseline (e⁻/s)' : 'flux (e⁻/s)', 64)],
-      series: [{label: 'MJD', value: (u, x) => x == null ? '—' : toReal(V, x).t.toFixed(4)},
-               {label: resid ? 'zero' : 'baseline', stroke: C('--c-base'), width: 1.8, value: v1, points: {show: false}},
-               {label: resid ? 'flux − baseline' : 'flux', stroke: 'rgba(234,223,224,0.55)', width: 1, value: v1,
-                points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
-               {label: 'flares', stroke: C('--c-flare'), width: 1.8, value: v1,
-                points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],
-      cursor: CURSOR(),
-      hooks: {drawClear: [u => shadeFlares(u, V, evs)], draw: [u => drawGaps(u, V)]},
+      series: [{},
+               {stroke: C('--c-base'), width: 1.8, points: {show: false}},                         // baseline (zero when subtracted)
+               {stroke: 'rgba(234,223,224,0.55)', width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
+               {stroke: C('--c-flare'), width: 1.8, points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],   // flares
+      cursor: CURSOR(), legend: {show: false},
+      hooks: {drawClear: [u => shadeFlares(u, V, evs)], draw: [u => drawGaps(u, V)],
+              setCursor: [readout(el, (x, f) => `t = ${toReal(V, x).t.toFixed(4)}, f = ${f.toFixed(1)} e⁻/s`)]},
     }, viewData(V, resid, evs), el);
     if (old) OV.setScale('x', {min: old[0], max: old[1]});
     let down = null;
@@ -336,57 +344,62 @@
       xs.push(x); ys.push(y); yf.push(i >= i0 && i <= i1 ? y : null);
       if (w.e[i] != null) err.set(x, w.e[i] / 10);
     }
-    // 'subtract decay fit': what is left after the power-law decay, from the peak frame on (the fit only models the decay)
+    // 'subtract decay fit': what is left after the power-law decay, from the peak frame on (the fit only models the
+    // decay), in units of each frame's noise sigma
     const subFit = $('subfit').checked && ev.fit;
     if (subFit) {
-      const keep = xs.map(x => x >= -1e-6);
       const m = plModel(xs, ev.fit);
-      ys = ys.map((y, i) => y - m[i]).filter((_, i) => keep[i]);
-      yf = yf.map((y, i) => y == null ? null : y - m[i]).filter((_, i) => keep[i]);
-      xs = xs.filter((_, i) => keep[i]);
+      const keep = xs.map(x => x >= -1e-6 && err.has(x));
+      ys = ys.map((y, i) => keep[i] ? (y - m[i]) / err.get(xs[i]) : null);
+      yf = yf.map((y, i) => y == null || !keep[i] ? null : (y - m[i]) / err.get(xs[i]));
+      [xs, ys, yf] = [xs, ys, yf].map(a => a.filter((_, i) => keep[i]));
     }
     const showFit = $('showfit').checked && ev.fit && !subFit;
-    let data, series = [{label: 'hours from peak', value: (u, v) => v == null ? '—' : v.toFixed(2)},
-      {label: subFit ? 'after the decay fit' : 'flux − baseline', stroke: 'rgba(234,223,224,0.30)', width: 1, spanGaps: true, value: v1,
+    let data, series = [{},
+      {stroke: 'rgba(234,223,224,0.30)', width: 1, spanGaps: true,
        points: {show: true, size: 3.5, space: 0, fill: '#cdb8bc', stroke: '#cdb8bc'}},
-      {label: 'flare', stroke: C('--c-flare'), width: 2.2, spanGaps: true, value: v1,
+      {stroke: showFit ? 'rgba(0,0,0,0)' : C('--c-flare'), width: 2.2, spanGaps: true,     // with the fit on, the fit is the line
        points: {show: true, size: 5, space: 0, fill: C('--c-flare'), stroke: C('--c-flare')}}];
     if (showFit) {
       const x0 = ev.fit.tp - ev.fit.cad, x1 = ev.fit.x1, N = 500;
       const xm = Array.from({length: N}, (_, i) => x0 + (x1 - x0) * i / (N - 1));
       data = uPlot.join([[xs, ys, yf], [xm, plModel(xm, ev.fit)]]);
-      series.push({label: 'decay fit', stroke: 'rgba(244,234,235,0.7)', width: 1.2, dash: [5, 4], spanGaps: true,
-                   value: v1, points: {show: false}});
+      series.push({stroke: C('--c-base'), width: 2.2, dash: [7, 4], spanGaps: true, points: {show: false}});
     } else data = [xs, ys, yf];
+    const showFeat = $('showfeat').checked;
     const cadh = w.dt * 24;
     FC = new uPlot({
       width: el.clientWidth, height: 300,
       scales: {x: {time: false}},
-      axes: [axis('hours from the peak frame', 40), axis(subFit ? 'flux − baseline − decay fit (e⁻/s)' : 'flux − baseline (e⁻/s)', 64)],
-      series, cursor: CURSOR(),
+      axes: [axis('hours from the peak frame', 40), axis(subFit ? 'residual from the decay fit (σ)' : 'flux − baseline (e⁻/s)', 64)],
+      series, cursor: CURSOR(), legend: {show: false},
       hooks: {
+        setCursor: [readout(el, (x, f) => `t = ${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)} h, f = ` +
+                                          (subFit ? `${f.toFixed(1)}σ` : `${f.toFixed(1)} e⁻/s`))],
         drawClear: [u => {
           const ctx = u.ctx, top = u.bbox.top, h = u.bbox.height;
           ctx.save(); clip(u);
           const dpr = devicePixelRatio || 1;
           ctx.font = `${Math.round(11 * dpr)}px "IBM Plex Sans", system-ui, sans-serif`;
           ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-          for (const sp of ev.spans) {
+          for (const sp of showFeat ? ev.spans : []) {
             const a = u.valToPos(sp.x0 - cadh / 2, 'x', true), b = u.valToPos(sp.x1 + cadh / 2, 'x', true);
             ctx.fillStyle = FEAT;
             ctx.fillRect(a, top, Math.max(b - a, 2), h);
             ctx.fillStyle = FEAT_TEXT;
             ctx.fillText(FEAT_LABEL[sp.kind] || sp.kind, (a + b) / 2, top + 6 * dpr);
           }
-          if (subFit) {                                                   // zero line of the residual
-            const y0 = u.valToPos(0, 'y', true);
-            ctx.strokeStyle = 'rgba(244,234,235,0.45)'; ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.lineWidth = dpr;
-            ctx.beginPath(); ctx.moveTo(u.bbox.left, y0); ctx.lineTo(u.bbox.left + u.bbox.width, y0); ctx.stroke();
-          }
+          ctx.restore();
+        }],
+        drawAxes: [u => {                                                 // zero (the baseline, or the decay fit): over the grid, under the data
+          const ctx = u.ctx, dpr = devicePixelRatio || 1, y0 = u.valToPos(0, 'y', true);
+          ctx.save(); clip(u); ctx.strokeStyle = 'rgba(244,234,235,0.6)'; ctx.lineWidth = 1.5 * dpr;
+          ctx.beginPath(); ctx.moveTo(u.bbox.left, y0); ctx.lineTo(u.bbox.left + u.bbox.width, y0); ctx.stroke();
           ctx.restore();
         }],
         draw: [u => {                                                     // error bars
           const ctx = u.ctx;
+          if (subFit) return;                                             // in sigma units every bar is +-1
           ctx.save(); clip(u); ctx.strokeStyle = 'rgba(234,223,224,0.40)'; ctx.lineWidth = devicePixelRatio || 1;
           const X = u.data[0], Y = u.data[1], x0 = u.scales.x.min, x1 = u.scales.x.max;
           for (let i = 0; i < X.length; i++) {
@@ -439,6 +452,8 @@
       stat('Power-law index &alpha;', ev.fit ? fmt(ev.fit.alpha, 2) + (ev.fit.alpha > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') : '&mdash;') +
       stat('Rise (peak &minus; t<sub>0</sub>)', `${fmt(ev.rise, 0)} min`) +
       stat('Peaks', `${ev.n_peaks}` + (pk.length ? ` <span class="sub">(${pk.map(q => `${q.kind} ${q.dt >= 0 ? '+' : ''}${fmt(q.dt, 1)} h${q.cat ? '' : ', new'}`).join('; ')})</span>` : '')) +
+      stat('TESSELLATE detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
+        `S${ev.s} ${L.cam}/${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}`).join('<br>') : '&mdash;') +
       stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
       stat('Catalogue entr' + (ev.loc.length > 1 ? 'ies' : 'y'), ev.loc.map(L => `<span class="sub">${TF.esc(L.name)}</span>`).join('<br>') || '&mdash;');
   }
@@ -489,6 +504,7 @@
   $('resid').addEventListener('change', () => drawOverview(VIEW, true));
   $('showfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
   $('subfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], false); });
+  $('showfeat').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
   $('show2').addEventListener('change', () => {
     renderTabs(); renderTable(); skyAll();
     if (SEL != null && !visible().some(e => e.k === SEL)) {       // the selected flare was just hidden
@@ -504,9 +520,10 @@
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(fit); ro.observe($('overview')); ro.observe($('flarechart')); }
   window.addEventListener('resize', fit);
 
-  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_peaks,snr,amplitude,ed_s,t_half_min,alpha,rise_min,catalogue_names']
+  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_peaks,snr,amplitude,ed_s,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
     .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_peaks, e.snr, e.amp ?? '', e.ed ?? '',
-      e.thalf ?? '', e.fit ? e.fit.alpha : '', e.rise, '"' + e.loc.map(L => L.name).join('; ') + '"'].join(','))).join('\n');
+      e.thalf ?? '', e.fit ? e.fit.alpha : '', e.rise, '"' + e.loc.map(L => L.name).join('; ') + '"',
+      ...['cam', 'ccd', 'cut', 'obj', 'eid'].map(c => '"' + e.loc.map(L => L[c] ?? '').join('; ') + '"')].join(','))).join('\n');
   const blob = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
   $('dl').innerHTML = `<a href="${blob}" download="gaia_dr3_${S.id}_flares.csv">This star's flares (CSV)</a>` +
     `<a href="${dataURL}" download>Light-curve data behind this page (gzipped JSON: 30-minute bins, baseline, full-cadence flare windows)</a>` +
