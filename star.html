@@ -1,0 +1,67 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Flare star — TESSELLATE flare catalogue</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
+<main class="wide star" id="main">
+  <a class="home" href="index.html">&larr; Catalogue</a>
+  <p class="eyebrow">TESSELLATE flare star</p>
+  <h1 id="name">Loading&hellip;</h1>
+  <p class="note" id="subtitle" style="margin:0"></p>
+
+  <div class="toprow">
+    <section class="panel" id="info" aria-label="Star properties"></section>
+    <section class="panel skypanel" aria-label="Sky view">
+      <div id="aladin"></div>
+      <p class="hint">Red circles: the 3&sigma; localisation region of each flare (a gold flare has exactly one Gaia star inside its circle); click one to select that flare. Selected flare in bold. Teal: the Gaia host star. Grey: other Gaia DR3 sources. Scroll to zoom, drag to pan.</p>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Light curve">
+    <div class="lchead">
+      <p class="sec" style="margin:0">TESSELLATE light curve</p>
+      <div class="tabs" id="tabs" role="group" aria-label="Sector"></div>
+      <div class="toggles">
+        <label class="toggle" id="show2wrap"><input type="checkbox" id="show2"> show secondary flares</label>
+        <label class="toggle"><input type="checkbox" id="resid"> subtract baseline</label>
+      </div>
+    </div>
+    <div id="overview" class="chart"></div>
+    <p class="hint">30-minute bins outside flares; flares in red over gold bands (click one to inspect it below). Drag across the plot to zoom in time, double-click to zoom back out. In the all-sectors view the gaps between sectors are removed and marked //.</p>
+  </section>
+
+  <section class="panel" aria-label="Selected flare">
+    <div class="lchead">
+      <p class="sec" style="margin:0" id="ftitle">Flare</p>
+      <div class="toggles">
+        <label class="toggle"><input type="checkbox" id="showfit"> show power-law decay fit</label>
+        <label class="toggle" title="Flux left after the fitted power-law decay, from the peak frame on"><input type="checkbox" id="subfit"> subtract decay fit</label>
+      </div>
+    </div>
+    <div class="flaregrid">
+      <div>
+        <div id="flarechart" class="chart"></div>
+      </div>
+      <div id="fstats"></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Flares on this star">
+    <p class="sec">Flares on this star</p>
+    <div class="tablewrap"><table class="cat" id="ftable"></table></div>
+    <p class="hint" id="fhidden"></p>
+    <p class="hint">Times are MJD at the brightest 10-minute frame. ED: equivalent duration, the flare's energy in seconds of the star's quiescent output in the TESS band. Gold flares host-matched at p<sub>Flare</sub> &ge; 0.9; secondary flares are other flares on a gold star.</p>
+  </section>
+
+  <section class="panel" aria-label="Downloads">
+    <p class="sec">Downloads</p>
+    <div class="dl" id="dl"></div>
+  </section>
+
+  <footer>TESSELLATE flare star catalogue &middot; <a href="index.html">home</a> &middot; <a href="search.html">browse all stars</a></footer>
+</main>
+<script src="assets/common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js"></script>
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+<script src="assets/star.js"></script>
+</html>
