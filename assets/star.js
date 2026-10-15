@@ -142,14 +142,16 @@
     grid: {stroke: C('--hairline'), width: 1}, ticks: {stroke: C('--panel-border'), width: 1}});
   const clip = u => { const b = u.bbox; u.ctx.beginPath(); u.ctx.rect(b.left, b.top, b.width, b.height); u.ctx.clip(); };
   // time-only zoom: no horizontal cursor line, drag selects a time range and the flux axis rescales itself
-  const CURSOR = () => ({y: false, drag: {x: true, y: false}, points: {size: 6}});   // fresh object per chart
-  // cursor position as a small (t, f) readout in the chart's bottom-right corner (instead of uPlot's legend)
-  function readout(el, text) {
+  // only the data series si gets a cursor dot: the readout reports that point
+  const CURSOR = si => ({y: false, drag: {x: true, y: false}, points: {size: (u, i) => i === si ? 6 : 0}});   // fresh object per chart
+  // (t, f) of the data point nearest the cursor (the highlighted one on series si), in the chart's bottom-right
+  // corner instead of uPlot's legend
+  function readout(el, si, text) {
     let r = el.querySelector('.readout');
     if (!r) { r = document.createElement('div'); r.className = 'readout'; el.appendChild(r); }
     return u => {
-      const {left, top} = u.cursor;
-      r.textContent = left == null || left < 0 || top == null || top < 0 ? '' : text(u.posToVal(left, 'x'), u.posToVal(top, 'y'));
+      const i = u.cursor.idxs ? u.cursor.idxs[si] : u.cursor.idx, y = i == null ? null : u.data[si][i];
+      r.textContent = u.cursor.left == null || u.cursor.left < 0 || y == null ? '' : text(u.data[0][i], y);
     };
   }
 
@@ -275,9 +277,9 @@
                {stroke: C('--c-base'), width: 1.8, points: {show: false}},                         // baseline (zero when subtracted)
                {stroke: 'rgba(234,223,224,0.55)', width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
                {stroke: C('--c-flare'), width: 1.8, points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],   // flares
-      cursor: CURSOR(), legend: {show: false},
+      cursor: CURSOR(2), legend: {show: false},
       hooks: {drawClear: [u => shadeFlares(u, V, evs)], draw: [u => drawGaps(u, V)],
-              setCursor: [readout(el, (x, f) => `t = ${toReal(V, x).t.toFixed(4)}, f = ${f.toFixed(1)} e⁻/s`)]},
+              setCursor: [readout(el, 2, (x, f) => `t = ${toReal(V, x).t.toFixed(4)}, f = ${f.toFixed(1)} e⁻/s`)]},
     }, viewData(V, resid, evs), el);
     if (old) OV.setScale('x', {min: old[0], max: old[1]});
     let down = null;
@@ -313,7 +315,7 @@
   }
   // flare features in the inset: one colour for all of them, named inside their shaded regions
   const FEAT = 'rgba(255,214,110,0.16)', FEAT_TEXT = '#f3d58a';
-  const FEAT_LABEL = {peak: 'extra peak', shoulder: 'shoulder', precursor: 'precursor', possible: '2–3σ'};
+  const FEAT_LABEL = {main: 'main peak', peak: 'extra peak', shoulder: 'shoulder', precursor: 'precursor', possible: '2–3σ'};
   // Frames drawn in red, as indices into the window (indices, not times: comparing rounded times once dropped a
   // single-frame rise's peak). From the peak frame walk back while the flux is above 1 sigma, stepping over at most
   // one frame below it (a precursor separated by two or more quiet frames stays out); the red then starts at the
@@ -333,11 +335,15 @@
   }
   function drawFlare(ev, keepRange) {
     const el = $('flarechart');
-    const old = keepRange && FC ? [FC.scales.x.min, FC.scales.x.max] : null;
+    // (a chart redrawn twice in one tick has no committed scale yet: then start from the default range)
+    const old = keepRange && FC && Number.isFinite(FC.scales.x.min) && Number.isFinite(FC.scales.x.max) ? [FC.scales.x.min, FC.scales.x.max] : null;
     if (FC) { FC.destroy(); FC = null; }
     let xs = [], ys = [], yf = [];
     const w = ev.w, err = new Map();
     const [i0, i1] = flareFrames(ev);
+    // the main peak as a feature: its rise, from the first frame above the noise to the peak frame
+    const iRise = Math.min(i0 + 1, Math.round((ev.tpk - w.t) / w.dt));
+    const mainSpan = {kind: 'main', x0: (w.t + iRise * w.dt - ev.tpk) * 24, x1: 0};
     for (let i = 0; i < w.r.length; i++) {
       if (w.r[i] == null) continue;
       const x = (w.t + i * w.dt - ev.tpk) * 24, y = w.r[i] / 10;
@@ -372,9 +378,9 @@
       width: el.clientWidth, height: 300,
       scales: {x: {time: false}},
       axes: [axis('hours from the peak frame', 40), axis(subFit ? 'residual from the decay fit (σ)' : 'flux − baseline (e⁻/s)', 64)],
-      series, cursor: CURSOR(), legend: {show: false},
+      series, cursor: CURSOR(1), legend: {show: false},
       hooks: {
-        setCursor: [readout(el, (x, f) => `t = ${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)} h, f = ` +
+        setCursor: [readout(el, 1, (x, f) => `t = ${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)} h, f = ` +
                                           (subFit ? `${f.toFixed(1)}σ` : `${f.toFixed(1)} e⁻/s`))],
         drawClear: [u => {
           const ctx = u.ctx, top = u.bbox.top, h = u.bbox.height;
@@ -382,12 +388,16 @@
           const dpr = devicePixelRatio || 1;
           ctx.font = `${Math.round(11 * dpr)}px "IBM Plex Sans", system-ui, sans-serif`;
           ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-          for (const sp of showFeat ? ev.spans : []) {
+          let labelEnd = -Infinity, row = 0;                              // a label that would touch the previous one drops a line
+          for (const sp of showFeat ? [mainSpan].concat(ev.spans).sort((p, q) => p.x0 - q.x0) : []) {
             const a = u.valToPos(sp.x0 - cadh / 2, 'x', true), b = u.valToPos(sp.x1 + cadh / 2, 'x', true);
             ctx.fillStyle = FEAT;
             ctx.fillRect(a, top, Math.max(b - a, 2), h);
+            const txt = FEAT_LABEL[sp.kind] || sp.kind, tw = ctx.measureText(txt).width, xc = (a + b) / 2;
+            row = xc - tw / 2 < labelEnd + 6 * dpr ? row + 1 : 0;
+            labelEnd = xc + tw / 2;
             ctx.fillStyle = FEAT_TEXT;
-            ctx.fillText(FEAT_LABEL[sp.kind] || sp.kind, (a + b) / 2, top + 6 * dpr);
+            ctx.fillText(txt, xc, top + (6 + 14 * row) * dpr);
           }
           ctx.restore();
         }],
@@ -452,8 +462,8 @@
       stat('Power-law index &alpha;', ev.fit ? fmt(ev.fit.alpha, 2) + (ev.fit.alpha > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') : '&mdash;') +
       stat('Rise (peak &minus; t<sub>0</sub>)', `${fmt(ev.rise, 0)} min`) +
       stat('Peaks', `${ev.n_peaks}` + (pk.length ? ` <span class="sub">(${pk.map(q => `${q.kind} ${q.dt >= 0 ? '+' : ''}${fmt(q.dt, 1)} h${q.cat ? '' : ', new'}`).join('; ')})</span>` : '')) +
-      stat('TESSELLATE detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
-        `S${ev.s} ${L.cam}/${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}`).join('<br>') : '&mdash;') +
+      stat('Detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
+        `<span class="nowrap">S${ev.s} ${L.cam}/${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}</span>`).join('<br>') : '&mdash;') +
       stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
       stat('Catalogue entr' + (ev.loc.length > 1 ? 'ies' : 'y'), ev.loc.map(L => `<span class="sub">${TF.esc(L.name)}</span>`).join('<br>') || '&mdash;');
   }

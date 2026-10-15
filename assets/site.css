@@ -153,3 +153,4 @@ table.cat tbody tr.click{cursor:pointer}
 }
 .chart{position:relative;padding-bottom:15px}
 .chart .readout{position:absolute;right:10px;bottom:3px;font:11px "IBM Plex Mono",ui-monospace,monospace;color:var(--text-faint);pointer-events:none;white-space:nowrap}
+.nowrap{white-space:nowrap}
