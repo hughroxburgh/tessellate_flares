@@ -328,30 +328,23 @@
   }
 
   // ---------------- flare view ----------------
-  // power-law decay A (1 + u/tau)^-alpha (u = time since t_p, 0 before), averaged over an exposure centred on each x,
-  // integrated exactly: a 10-point average zig-zags when the decay is shorter than a tenth of a frame. x in hours.
-  function plModel(xh, f) {
-    const tau = f.tau / 60, h = f.cad / 2, a = f.alpha, out = new Array(xh.length);
-    const prim = u => Math.abs(a - 1) < 1e-6 ? tau * Math.log(1 + u / tau) : tau / (1 - a) * (Math.pow(1 + u / tau, 1 - a) - 1);
-    for (let j = 0; j < xh.length; j++) {
-      const u1 = xh[j] + h - f.tp, u0 = Math.max(0, xh[j] - h - f.tp);
-      out[j] = u1 <= 0 ? 0 : f.A * (prim(u1) - prim(u0)) / f.cad;
-    }
-    return out;
-  }
-  // Fitted component model (fit_components.py): main flare = Gaussian rise into a power-law or double-exponential decay,
-  // each component = Gaussian rise into an exponential decay; all averaged over the exposure (N_SUB sub-samples).
-  // Times in hours from the peak frame. Only the significant (kept) components are drawn.
+  // Fitted flare model (fit_components.py): main flare = a rise with a definite onset (zero before t_peak - w, then
+  // (1 - (u/w)^2)^2 up to the peak) into a power-law or double-exponential decay; each component = the same rise into an
+  // exponential decay; all averaged over the exposure (N_SUB sub-samples). Times in hours from the peak frame.
+  // Only the significant (kept) components are returned. Each curve is null before its onset (drawn from where it starts).
+  const riseShape = (u, w) => { const z = Math.max(u / w, -1); return (1 - z * z) ** 2; };
   function compModel(xh, cm, cadh) {
-    const N_SUB = 15, p = cm.p, n = xh.length;
-    const mainShape = u => u < 0 ? Math.exp(-0.5 * (u / p[2]) ** 2) :
+    const N_SUB = 15, p = cm.p;
+    const mainShape = u => u < 0 ? riseShape(u, p[2]) :
       cm.kind === 'PL' ? Math.pow(1 + u / p[3], -p[4]) : (1 - p[5]) * Math.exp(-u / p[3]) + p[5] * Math.exp(-u / p[4]);
-    const compShape = (u, q) => u < 0 ? Math.exp(-0.5 * (u / q[2]) ** 2) : Math.exp(-u / q[3]);
+    const compShape = (u, q) => u < 0 ? riseShape(u, q[2]) : Math.exp(-u / q[3]);
     const avg = f => xh.map(x => { let a = 0; for (let k = 0; k < N_SUB; k++) a += f(x + ((k + 0.5) / N_SUB - 0.5) * cadh); return a / N_SUB; });
     const main = avg(t => p[1] * mainShape(t - p[0]));
-    const comps = cm.comps.filter(c => c.kept).map(c => avg(t => c.p[1] * compShape(t - c.p[0], c.p)));
+    const kept = cm.comps.filter(c => c.kept);
+    const comps = kept.map(c => avg(t => c.p[1] * compShape(t - c.p[0], c.p)));
     const tot = main.map((v, i) => v + comps.reduce((a, c) => a + c[i], 0));
-    return {main, comps, tot};
+    const from = (arr, t0) => arr.map((v, i) => xh[i] < t0 - cadh / 2 ? null : v);       // null before the onset
+    return {main: from(main, p[0] - p[2]), comps: comps.map((c, j) => from(c, kept[j].p[0] - kept[j].p[2])), tot};
   }
   // flare features in the inset: one colour for all of them, named inside their shaded regions
   const FEAT = 'rgba(255,214,110,0.16)', FEAT_TEXT = '#f3d58a';
@@ -398,45 +391,36 @@
       xs.push(x); ys.push(y); yf.push(i >= i0 && i <= i1 ? y : null);
       if (w.e[i] != null) err.set(x, w.e[i] / 10);
     }
-    // 'subtract decay fit': what is left after the power-law decay, from the peak frame on (the fit only models the
-    // decay), in units of each frame's noise sigma
-    const subFit = $('subfit').checked && ev.fit;
+    // 'subtract model': what is left after the fitted model (main flare + significant components), over the fitted
+    // range, in units of each frame's noise sigma
+    const subFit = $('subfit').checked && ev.cm;
     if (subFit) {
-      const m = plModel(xs, ev.fit);
-      const keep = xs.map(x => x >= -1e-6 && err.has(x));
+      const m = compModel(xs, ev.cm, w.dt * 24).tot;
+      const keep = xs.map(x => x >= ev.cm.x0 - 1e-6 && x <= ev.cm.x1 + 1e-6 && err.has(x));
       ys = ys.map((y, i) => keep[i] ? (y - m[i]) / err.get(xs[i]) : null);
       yf = yf.map((y, i) => y == null || !keep[i] ? null : (y - m[i]) / err.get(xs[i]));
       [xs, ys, yf] = [xs, ys, yf].map(a => a.filter((_, i) => keep[i]));
     }
-    const showFit = $('showfit').checked && ev.fit && !subFit;
+    const showFit = $('showfeat').checked && ev.cm && !subFit;     // 'show components': the model as dashed curves
     let data, series = [{},
       {stroke: 'rgba(234,223,224,0.30)', width: 1, spanGaps: true,
        points: {show: true, size: 3.5, space: 0, fill: '#cdb8bc', stroke: '#cdb8bc'}},
       {stroke: showFit ? 'rgba(0,0,0,0)' : C('--c-flare'), width: 2.2, spanGaps: true,     // with the fit on, the fit is the line
        points: {show: true, size: 5, space: 0, fill: C('--c-flare'), stroke: C('--c-flare')}}];
-    if (showFit) {
-      const x0 = ev.fit.tp - ev.fit.cad, x1 = ev.fit.x1, N = 500;
-      const xm = Array.from({length: N}, (_, i) => x0 + (x1 - x0) * i / (N - 1));
-      data = uPlot.join([[xs, ys, yf], [xm, plModel(xm, ev.fit)]]);
-      series.push({stroke: C('--c-base'), width: 2.2, dash: [7, 4], spanGaps: true, points: {show: false}});
-    } else data = [xs, ys, yf];
-    const showComp = $('showfeat').checked && ev.cm && !subFit && ev.n_comp > 0;
-    if (showComp) {                                     // total model, main flare, each significant component
-      const N = 400, x0 = ev.cm.x0, x1 = ev.cm.x1;
+    if (showFit) {                                      // main flare (cobalt) and each significant component (gold)
+      const N = 500, x0 = ev.cm.x0, x1 = ev.cm.x1;
       const xm = Array.from({length: N}, (_, i) => x0 + (x1 - x0) * i / (N - 1));
       const cmod = compModel(xm, ev.cm, w.dt * 24);
-      const tables = [data, [xm, cmod.tot, cmod.main, ...cmod.comps]];
-      data = uPlot.join(tables);
-      series.push({stroke: 'rgba(244,234,235,0.85)', width: 1.6, spanGaps: true, points: {show: false}},
-                  {stroke: C('--c-base'), width: 1.8, dash: [2, 3], spanGaps: true, points: {show: false}},
-                  ...cmod.comps.map(() => ({stroke: '#f3c35a', width: 2, dash: [7, 4], spanGaps: true, points: {show: false}})));
-    }
+      data = uPlot.join([[xs, ys, yf], [xm, cmod.main, ...cmod.comps]]);
+      series.push({stroke: C('--c-base'), width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}},
+                  ...cmod.comps.map(() => ({stroke: '#f3c35a', width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}})));
+    } else data = [xs, ys, yf];
     const showFeat = false;                             // (the old rule-based feature shading is retired)
     const cadh = w.dt * 24;
     FC = new uPlot({
       width: el.clientWidth, height: 300,
       scales: {x: {time: false}},
-      axes: [axis('hours from the peak frame', 40), axis(subFit ? 'residual from the decay fit (σ)' : 'flux − baseline (e⁻/s)', 64)],
+      axes: [axis('hours from the peak frame', 40), axis(subFit ? 'residual from the model (σ)' : 'flux − baseline (e⁻/s)', 64)],
       series, cursor: CURSOR(1), legend: {show: false},
       hooks: {
         setCursor: [readout(el, 1, (x, f) => `t = ${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)} h, f = ` +
@@ -483,11 +467,11 @@
     if (old) FC.setScale('x', {min: old[0], max: old[1]});
     else {
       const xEnd = Math.max(6, (ev.end - ev.tpk) * 24 + 1, ...ev.spans.map(sp => sp.x1 + 0.5));
-      const xStart = subFit ? -0.25 : Math.min(-2, (ev.start - ev.tpk) * 24 - 0.5, ...ev.spans.map(sp => sp.x0 - 0.5));
+      const xStart = subFit ? ev.cm.x0 - 0.1 : Math.min(-2, (ev.start - ev.tpk) * 24 - 0.5, ...ev.spans.map(sp => sp.x0 - 0.5));
       FC.setScale('x', {min: Math.max(xStart, data[0][0]), max: Math.min(xEnd, data[0][data[0].length - 1])});
     }
-    $('showfit').disabled = !ev.fit || !!subFit;
-    $('subfit').disabled = !ev.fit;
+    $('showfeat').disabled = !ev.cm || !!subFit;
+    $('subfit').disabled = !ev.cm;
   }
 
   // ---------------- selected-flare details ----------------
@@ -500,20 +484,6 @@
     }
     return 'no extra component found';
   }
-  function reasonOld(ev) {
-    const z = v => `${fmt(v, 1)}&sigma;`;
-    const p = ev.spans.find(s => s.kind === 'peak'), pre = ev.spans.find(s => s.kind === 'precursor');
-    if (ev.cls === 'complex') {
-      const parts = [];
-      if (p) parts.push(`rises again ${z(p.z)} above the decay at +${fmt(p.x0, 1)} h`);
-      if (pre) parts.push(`precursor ${z(pre.z)} at ${fmt(pre.x0, 1)} h`);
-      if (!parts.length) parts.push(`${z(ev.zb)} excess over the decay (a shoulder, no second rise)`);
-      return parts.join('; ');
-    }
-    if (ev.cls === 'possible') return `a 2&ndash;3&sigma; feature (strongest ${z(Math.max(ev.zb || 0, ev.zp || 0))})`;
-    if (ev.cls === 'shape') return 'excess over most of the decay: one flare whose decay is not a power law';
-    return ev.fit ? `no significant structure (strongest bump ${z(ev.zb)})` : 'too few frames to fit the decay';
-  }
   function showStats(ev) {
     $('ftitle').innerHTML = `Flare ${ev.k + 1} of ${EV.length} &middot; sector ${ev.s}`;
     $('fstats').innerHTML =
@@ -525,8 +495,10 @@
       stat('Peak S/N', fmt(ev.snr, 1)) +
       stat('Amplitude &Delta;F/F', ev.amp == null ? '&mdash;' : sig3(ev.amp)) +
       stat('Equivalent duration', ev.ed == null ? '&mdash;' : `${sig3(ev.ed)} s`) +
-      stat('Decay half-time t<sub>&frac12;</sub>', ev.thalf == null ? '&mdash;' : `${fmt(ev.thalf, 1)} min`) +
-      stat('Power-law index &alpha;', ev.fit ? fmt(ev.fit.alpha, 2) + (ev.fit.alpha > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') : '&mdash;') +
+      stat('Decay half-time t<sub>&frac12;</sub>', ev.cm && ev.cm.th != null ? `${fmt(ev.cm.th, 1)} min` : '&mdash;') +
+      stat('Decay model', !ev.cm ? '&mdash;' : ev.cm.kind === 'PL' ? `power law, &alpha; = ${fmt(ev.cm.p[4], 2)}` +
+        (ev.cm.p[4] > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') :
+        `double exponential <span class="sub">(${fmt(ev.cm.p[3] * 60, 0)} and ${fmt(ev.cm.p[4] * 60, 0)} min, slow part ${fmt(100 * ev.cm.p[5], 0)}%)</span>`) +
       stat('Rise (peak &minus; t<sub>0</sub>)', `${fmt(ev.rise, 0)} min`) +
       stat('Components', ev.cm && ev.n_comp ? ev.cm.comps.filter(c => c.kept).map(c =>
         `<span class="nowrap">${c.d >= 0 ? '+' : '&minus;'}${fmt(Math.abs(c.d), 2)} h</span> <span class="sub">(${fmt(100 * c.a, 0)}% of peak, ` +
@@ -583,7 +555,6 @@
   $('resid').addEventListener('change', () => drawOverview(VIEW, true));
   $('subper').addEventListener('change', () => drawOverview(VIEW, true));
   $('showbase').addEventListener('change', () => OV.setSeries(1, {show: $('showbase').checked}));
-  $('showfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
   $('subfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], false); });
   $('showfeat').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
   $('show2').addEventListener('change', () => {
