@@ -346,15 +346,17 @@
     let xs = [], ys = [], yf = [];
     const w = ev.w, err = new Map();
     const [i0, i1] = flareFrames(ev);
-    // the main peak as a feature: the frames rising monotonically into the peak frame (from the one after the lowest
-    // point before it), and never into a precursor
-    const ipk = Math.round((ev.tpk - w.t) / w.dt);
-    let iMin = ipk;
-    while (iMin > 0 && w.r[iMin - 1] != null && w.r[iMin - 1] < w.r[iMin]) iMin--;
-    let x0Main = (w.t + Math.min(ipk, iMin + 1) * w.dt - ev.tpk) * 24;
+    // the main peak as a feature: the frames rising into the peak frame that are above the noise (1 sigma) and still
+    // climbing, never reaching into a precursor; it ends at the peak frame, or at the flare's end when the flare
+    // has no other feature
+    const ipk = Math.round((ev.tpk - w.t) / w.dt), xOf = i => (w.t + i * w.dt - ev.tpk) * 24;
+    let iRise = ipk;
+    while (iRise > 0 && w.r[iRise - 1] != null && w.e[iRise - 1] != null && w.r[iRise - 1] > w.e[iRise - 1] &&
+           w.r[iRise - 1] < w.r[iRise]) iRise--;
+    let x0Main = xOf(iRise);
     for (const sp of ev.spans) if (sp.kind === 'precursor' || (sp.kind === 'possible' && sp.x1 < 0))
       x0Main = Math.max(x0Main, Math.min(0, sp.x1 + w.dt * 24));
-    const mainSpan = {kind: 'main', x0: x0Main, x1: 0};
+    const mainSpan = {kind: 'main', x0: x0Main, x1: ev.spans.length ? 0 : xOf(i1)};
     for (let i = 0; i < w.r.length; i++) {
       if (w.r[i] == null) continue;
       const x = (w.t + i * w.dt - ev.tpk) * 24, y = w.r[i] / 10;
