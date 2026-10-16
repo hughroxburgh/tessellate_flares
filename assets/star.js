@@ -24,6 +24,20 @@
     return fail(`Gaia DR3 <span class="mono">${TF.esc(id)}</span> has no page in this catalogue.`);
   }
   const EV = S.events;
+  const PERIODIC = S.sectors.some(s => s.p);       // baseline has a periodic (rotation) part to subtract separately
+  // each flare's window (peak - 6 h .. max(end, peak) + 12 h), cut from its sector's full-cadence light curve:
+  // r = flux - baseline and e = noise sigma, in 0.1 e-/s, null where a frame is missing
+  for (const ev of EV) {
+    const sc = S.sectors.find(x => x.s === ev.s), n = sc.f.length;
+    const lo = Math.max(0, Math.ceil((ev.tpk - 0.25 - sc.t) / sc.dt - 1e-6));
+    const hi = Math.min(n - 1, Math.floor((Math.max(ev.end, ev.tpk) + 0.5 - sc.t) / sc.dt + 1e-6));
+    const r = [], e = [];
+    for (let i = lo; i <= hi; i++) {
+      r.push(sc.f[i] == null || sc.b[i] == null ? null : sc.f[i] - sc.b[i]);
+      e.push(sc.e ? sc.e[i] : null);
+    }
+    ev.w = {t: sc.t + lo * sc.dt, dt: sc.dt, r, e};
+  }
   const MULTI = S.sectors.length > 1;
   document.title = `Gaia DR3 ${S.id} — TESSELLATE flare catalogue`;
   $('name').innerHTML = `Gaia DR3 <span class="mono">${S.id}</span>`;
@@ -191,7 +205,9 @@
 
   // [x, baseline, flux, flux inside flares]; a null point between sectors breaks the lines across the gap.
   // Flare bins (plus one either side, so even a one-bin flare draws as a red spike) form their own series.
-  function viewData(V, resid, evs) {
+  // The baseline is a slow spline plus, for some rotators, a periodic part (sector field p; spline = b - p). Each can
+  // be subtracted on its own (sub = {spline, periodic}); the baseline line shows whatever part is left.
+  function viewData(V, sub, evs) {
     const X = [], Bs = [], F = [], R = [];
     V.segs.forEach((g, j) => {
       if (j > 0) { X.push((V.segs[j - 1].p1 + g.p0) / 2); Bs.push(null); F.push(null); R.push(null); }
@@ -203,10 +219,13 @@
         for (let i = i0; i <= i1; i++) fl[i] = true;
       }
       for (let i = 0; i < n; i++) {
-        const f = s.f[i], b = s.b[i];
-        let fv, bv;
-        if (resid) { fv = (f == null || b == null) ? null : (f - b) / 10; bv = b == null ? null : 0; }
-        else { fv = f == null ? null : f / 10; bv = b == null ? null : b / 10; }
+        const f = s.f[i], b = s.b[i], p = s.p ? s.p[i] : 0;
+        let fv = null, bv = null;
+        if (b != null && p != null) {
+          const off = (sub.spline ? b - p : 0) + (sub.periodic ? p : 0);       // what is subtracted
+          bv = (b - off) / 10;
+          if (f != null) fv = (f - off) / 10;
+        }
         X.push(g.p0 + (s.t + i * s.dt - g.t0)); Bs.push(bv); F.push(fv); R.push(fl[i] ? fv : null);
       }
     });
@@ -271,13 +290,15 @@
     const old = keepRange && OV && VIEW && VIEW.key === V.key ? [OV.scales.x.min, OV.scales.x.max] : null;
     VIEW = V;
     for (const b of $('tabs').children) b.setAttribute('aria-pressed', String(b.dataset.s === String(V.key)));
-    const resid = $('resid').checked, el = $('overview');
+    const sub = {spline: $('resid').checked, periodic: PERIODIC && $('subper').checked}, el = $('overview');
+    const ylab = !sub.spline && !sub.periodic ? 'flux' : !PERIODIC || (sub.spline && sub.periodic) ? 'flux − baseline' :
+                 sub.spline ? 'flux − spline baseline' : 'flux − periodic baseline';
     if (OV) { OV.destroy(); OV = null; }
     const evs = visible().filter(e => inView(V, e));
     OV = new uPlot({
       width: el.clientWidth, height: 300,
       scales: {x: {time: false}},
-      axes: [timeAxis(V), axis(resid ? 'flux − baseline (e⁻/s)' : 'flux (e⁻/s)', 64)],
+      axes: [timeAxis(V), axis(`${ylab} (e⁻/s)`, 64)],
       series: [{},
                {stroke: C('--c-base'), width: 1.8, points: {show: false}, show: $('showbase').checked},   // baseline (zero when subtracted)
                {stroke: 'rgba(234,223,224,0.55)', width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
@@ -285,7 +306,7 @@
       cursor: CURSOR(2), legend: {show: false},
       hooks: {drawClear: [u => shadeFlares(u, V, evs)], draw: [u => drawGaps(u, V)],
               setCursor: [readout(el, 2, (x, f) => `t = ${toReal(V, x).t.toFixed(4)}, f = ${f.toFixed(1)} e⁻/s`)]},
-    }, viewData(V, resid, evs), el);
+    }, viewData(V, sub, evs), el);
     if (old) OV.setScale('x', {min: old[0], max: old[1]});
     let down = null;
     OV.over.addEventListener('mousedown', e => { down = [e.clientX, e.clientY]; });
@@ -525,6 +546,7 @@
     drawOverview(b.dataset.s === 'all' ? viewAll() : viewOf(+b.dataset.s), false);
   });
   $('resid').addEventListener('change', () => drawOverview(VIEW, true));
+  $('subper').addEventListener('change', () => drawOverview(VIEW, true));
   $('showbase').addEventListener('change', () => OV.setSeries(1, {show: $('showbase').checked}));
   $('showfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
   $('subfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], false); });
@@ -550,10 +572,10 @@
       ...['cam', 'ccd', 'cut', 'obj', 'eid'].map(c => '"' + e.loc.map(L => L[c] ?? '').join('; ') + '"')].join(','))).join('\n');
   const blob = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
   $('dl').innerHTML = `<a href="${blob}" download="gaia_dr3_${S.id}_flares.csv">This star's flares (CSV)</a>` +
-    `<a href="${dataURL}" download>Light-curve data behind this page (gzipped JSON: 30-minute bins, baseline, full-cadence flare windows)</a>` +
-    `<span class="hint">Full-cadence light curves for every star will be released with the catalogue paper.</span>`;
+    `<a href="${dataURL}" download>Light-curve data behind this page (gzipped JSON: every 10-minute frame with its baseline and noise)</a>`;
 
-  if (!EV.some(e => e.tier !== 'gold')) $('show2wrap').hidden = true;     // nothing to hide on this star
+  if (!EV.some(e => e.tier !== 'gold')) $('show2wrap').hidden = true;
+  if (PERIODIC) $('residlabel').textContent = ' subtract spline baseline'; else $('subperwrap').hidden = true;     // nothing to hide on this star
   const f0 = parseInt(P.get('f') || '', 10);
   if (f0 >= 1 && f0 <= EV.length && EV[f0 - 1].tier !== 'gold') $('show2').checked = true;   // linked to a secondary flare
   const startEv = (f0 >= 1 && f0 <= EV.length) ? EV[f0 - 1] : brightest(visible());

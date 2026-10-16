@@ -2,7 +2,7 @@
 <title>TESSELLATE flare star catalogue</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Stellar flares found in TESS full-frame images by the TESSELLATE transient search, with every flare star's TESSELLATE light curve.">
-<link rel="stylesheet" href="assets/site.css?v=7">
+<link rel="stylesheet" href="assets/site.css?v=9">
 <main>
   <p class="eyebrow" id="eyebrow">TESSELLATE &middot; TESS full-frame images</p>
   <h1>Stellar flare catalogue</h1>
@@ -40,7 +40,7 @@
   </div>
 
   <h2>What is on a star page</h2>
-  <p class="note">The star's whole TESSELLATE light curve, sector by sector, in 30-minute bins with the fitted baseline, and every flare at the full 10-minute cadence with its fitted decay and any extra peaks; a table of the star's flares; and an <a href="https://aladin.cds.unistra.fr/AladinLite/">Aladin Lite</a> sky view showing the star, its Gaia neighbours and the 68% localisation region of each flare.</p>
+  <p class="note">The star's whole TESSELLATE light curve, sector by sector, at the full 10-minute cadence with the fitted baseline, and a close-up of every flare with its fitted decay and any extra peaks; a table of the star's flares; and an <a href="https://aladin.cds.unistra.fr/AladinLite/">Aladin Lite</a> sky view showing the star, its Gaia neighbours and the 68% localisation region of each flare.</p>
 
   <h2>How the flares are found and measured</h2>
   <p class="note"><strong>Detection.</strong> TESSELLATE (<a href="https://ui.adsabs.harvard.edu/abs/2025AJ....170..186R/abstract">Roxburgh &amp; Ridden-Harper et al. 2025</a>) searches difference images built by TESSreduce (<a href="https://arxiv.org/abs/2111.15006">Ridden-Harper et al. 2021</a>) for every transient in the TESS full-frame images, without a target list. Events are classified by a machine-learning model; a <em>gold</em> flare has a flare probability of at least 0.9 and a single Gaia star inside its 3&sigma; localisation region, and the flare stars here are the hosts of gold flares.</p>
@@ -51,7 +51,7 @@
 
   <footer>Also from TESSELLATE: <a href="https://cheerfuluser.github.io/tessellate_asteroid/">the asteroid rotation &amp; shape catalogue</a>. &middot; <span id="build"></span></footer>
 </main>
-<script src="assets/common.js?v=7"></script>
+<script src="assets/common.js?v=9"></script>
 <script>
 const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
 let DATA = [], sortKey = 'n', sortDir = -1;

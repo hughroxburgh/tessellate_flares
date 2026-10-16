@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><meta charset="utf-8">
 <title>Flare star — TESSELLATE flare catalogue</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="assets/site.css?v=7">
+<link rel="stylesheet" href="assets/site.css?v=9">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
 <main class="wide star" id="main">
   <a class="home" href="index.html">&larr; Catalogue</a>
@@ -24,11 +24,12 @@
       <div class="toggles">
         <label class="toggle" id="show2wrap"><input type="checkbox" id="show2"> show secondary flares</label>
         <label class="toggle"><input type="checkbox" id="showbase" checked> show baseline</label>
-        <label class="toggle"><input type="checkbox" id="resid"> subtract baseline</label>
+        <label class="toggle" id="subperwrap" title="The baseline's rotation part"><input type="checkbox" id="subper"> subtract periodic baseline</label>
+        <label class="toggle" title="The baseline's slow trend (with no rotation term, the whole baseline)"><input type="checkbox" id="resid"><span id="residlabel"> subtract baseline</span></label>
       </div>
     </div>
     <div id="overview" class="chart"></div>
-    <p class="hint">30-minute bins outside flares; flares in red over gold bands (click one to inspect it below). Drag across the plot to zoom in time, double-click to zoom back out. In the all-sectors view the gaps between sectors are removed and marked //.</p>
+    <p class="hint">Every 10-minute frame; flares in red over gold bands (click one to inspect it below). Drag across the plot to zoom in time, double-click to zoom back out. In the all-sectors view the gaps between sectors are removed and marked //.</p>
   </section>
 
   <section class="panel" aria-label="Selected flare">
@@ -62,7 +63,7 @@
 
   <footer>TESSELLATE flare star catalogue &middot; <a href="index.html">home</a> &middot; <a href="search.html">browse all stars</a></footer>
 </main>
-<script src="assets/common.js?v=7"></script>
+<script src="assets/common.js?v=9"></script>
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js"></script>
-<script src="assets/star.js?v=7"></script>
+<script src="assets/star.js?v=9"></script>
 </html>
