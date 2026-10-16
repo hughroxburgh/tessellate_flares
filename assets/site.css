@@ -3,7 +3,7 @@
    here where the asteroids use purple. Dark only, like the asteroid site. */
 :root {
   /* dark, dark red ground (Hugh, 2026-10-15) */
-  --bg:#130609; --panel:#261016; --panel-border:#4a222a; --hairline:#2b1318;
+  --bg:#130609; --panel:#30141b; --panel-border:#5a2a33; --hairline:#2b1318;
   --text:#f4eaeb; --text-dim:#c0a3a8; --text-faint:#8a6870;
   --accent:#ff7b7b; --accent-deep:#c2414a; --accent-bg:#4a1821; --warn:#e0a458;
   --plot-bg:#160709; --input-bg:#1a080c; --hover-bg:#2a0d13; --fig-bg:#1a0a0e;

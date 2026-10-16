@@ -279,7 +279,7 @@
       scales: {x: {time: false}},
       axes: [timeAxis(V), axis(resid ? 'flux − baseline (e⁻/s)' : 'flux (e⁻/s)', 64)],
       series: [{},
-               {stroke: C('--c-base'), width: 1.8, points: {show: false}},                         // baseline (zero when subtracted)
+               {stroke: C('--c-base'), width: 1.8, points: {show: false}, show: $('showbase').checked},   // baseline (zero when subtracted)
                {stroke: 'rgba(234,223,224,0.55)', width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
                {stroke: C('--c-flare'), width: 1.8, points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],   // flares
       cursor: CURSOR(2), legend: {show: false},
@@ -523,6 +523,7 @@
     drawOverview(b.dataset.s === 'all' ? viewAll() : viewOf(+b.dataset.s), false);
   });
   $('resid').addEventListener('change', () => drawOverview(VIEW, true));
+  $('showbase').addEventListener('change', () => OV.setSeries(1, {show: $('showbase').checked}));
   $('showfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
   $('subfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], false); });
   $('showfeat').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
