@@ -54,7 +54,7 @@
   // ---------------- info panel ----------------
   const stat = (l, v) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`;
   const nComplex = EV.filter(e => e.cls === 'complex').length;
-  const nExtra = EV.reduce((a, e) => a + (e.n_peaks - 1), 0);
+  const nExtra = EV.reduce((a, e) => a + (e.n_comp || 0), 0);
   const eds = EV.map(e => e.ed).filter(v => v != null);
   let rot = '&mdash;';
   if (S.prot != null) rot = `${S.prot.toFixed(3)} d <span class="sub">(LS power ${fmt(S.prot_power, 2)})</span>`;
@@ -72,7 +72,7 @@
     stat('Observing time', `${fmt(S.obs_days, 1)} d`) +
     stat('Flares', `${EV.length} <span class="sub">(${EV.filter(e => e.tier === 'gold').length} gold)</span>`) +
     stat('Flare rate', `${fmt(S.rate, 3)} per day`) +
-    stat('Complex flares', `${nComplex}` + (nExtra ? ` <span class="sub">(${nExtra} extra peak${nExtra > 1 ? 's' : ''})</span>` : '')) +
+    stat('Complex flares', `${nComplex}` + (nExtra ? ` <span class="sub">(${nExtra} significant component${nExtra > 1 ? 's' : ''})</span>` : '')) +
     stat('Largest flare (ED)', eds.length ? `${sig3(Math.max(...eds))} s` : '&mdash;') +
     stat('Rotation period', rot) +
     stat('Quiescent flux', S.sectors.map(s => s.fq == null ? `${s.s}: &mdash;` : `${s.s}: ${sig3(s.fq)}`).join(', ') + ' <span class="sub">e&#8315;/s</span>') +
@@ -339,6 +339,20 @@
     }
     return out;
   }
+  // Fitted component model (fit_components.py): main flare = Gaussian rise into a power-law or double-exponential decay,
+  // each component = Gaussian rise into an exponential decay; all averaged over the exposure (N_SUB sub-samples).
+  // Times in hours from the peak frame. Only the significant (kept) components are drawn.
+  function compModel(xh, cm, cadh) {
+    const N_SUB = 15, p = cm.p, n = xh.length;
+    const mainShape = u => u < 0 ? Math.exp(-0.5 * (u / p[2]) ** 2) :
+      cm.kind === 'PL' ? Math.pow(1 + u / p[3], -p[4]) : (1 - p[5]) * Math.exp(-u / p[3]) + p[5] * Math.exp(-u / p[4]);
+    const compShape = (u, q) => u < 0 ? Math.exp(-0.5 * (u / q[2]) ** 2) : Math.exp(-u / q[3]);
+    const avg = f => xh.map(x => { let a = 0; for (let k = 0; k < N_SUB; k++) a += f(x + ((k + 0.5) / N_SUB - 0.5) * cadh); return a / N_SUB; });
+    const main = avg(t => p[1] * mainShape(t - p[0]));
+    const comps = cm.comps.filter(c => c.kept).map(c => avg(t => c.p[1] * compShape(t - c.p[0], c.p)));
+    const tot = main.map((v, i) => v + comps.reduce((a, c) => a + c[i], 0));
+    return {main, comps, tot};
+  }
   // flare features in the inset: one colour for all of them, named inside their shaded regions
   const FEAT = 'rgba(255,214,110,0.16)', FEAT_TEXT = '#f3d58a';
   const FEAT_LABEL = {main: 'main peak', peak: 'extra peak', shoulder: 'shoulder', precursor: 'precursor', possible: '2–3σ'};
@@ -406,7 +420,18 @@
       data = uPlot.join([[xs, ys, yf], [xm, plModel(xm, ev.fit)]]);
       series.push({stroke: C('--c-base'), width: 2.2, dash: [7, 4], spanGaps: true, points: {show: false}});
     } else data = [xs, ys, yf];
-    const showFeat = $('showfeat').checked;
+    const showComp = $('showfeat').checked && ev.cm && !subFit && ev.n_comp > 0;
+    if (showComp) {                                     // total model, main flare, each significant component
+      const N = 400, x0 = ev.cm.x0, x1 = ev.cm.x1;
+      const xm = Array.from({length: N}, (_, i) => x0 + (x1 - x0) * i / (N - 1));
+      const cmod = compModel(xm, ev.cm, w.dt * 24);
+      const tables = [data, [xm, cmod.tot, cmod.main, ...cmod.comps]];
+      data = uPlot.join(tables);
+      series.push({stroke: 'rgba(244,234,235,0.85)', width: 1.6, spanGaps: true, points: {show: false}},
+                  {stroke: C('--c-base'), width: 1.8, dash: [2, 3], spanGaps: true, points: {show: false}},
+                  ...cmod.comps.map(() => ({stroke: '#f3c35a', width: 2, dash: [7, 4], spanGaps: true, points: {show: false}})));
+    }
+    const showFeat = false;                             // (the old rule-based feature shading is retired)
     const cadh = w.dt * 24;
     FC = new uPlot({
       width: el.clientWidth, height: 300,
@@ -467,6 +492,15 @@
 
   // ---------------- selected-flare details ----------------
   function reason(ev) {
+    if (ev.cm) {
+      const kept = ev.cm.comps.filter(c => c.kept), n2 = ev.cm.comps.length - kept.length;
+      const rej = n2 ? ` <span class="sub">(${n2} candidate${n2 > 1 ? 's' : ''} not significant)</span>` : '';
+      return kept.length ? `${kept.length} significant extra component${kept.length > 1 ? 's' : ''} in the fit (&Delta;BIC &gt; 10)` + rej
+                         : 'no significant extra component in the fit' + rej;
+    }
+    return 'no extra component found';
+  }
+  function reasonOld(ev) {
     const z = v => `${fmt(v, 1)}&sigma;`;
     const p = ev.spans.find(s => s.kind === 'peak'), pre = ev.spans.find(s => s.kind === 'precursor');
     if (ev.cls === 'complex') {
@@ -481,7 +515,6 @@
     return ev.fit ? `no significant structure (strongest bump ${z(ev.zb)})` : 'too few frames to fit the decay';
   }
   function showStats(ev) {
-    const pk = ev.peaks.filter(q => q.kind !== 'main');
     $('ftitle').innerHTML = `Flare ${ev.k + 1} of ${EV.length} &middot; sector ${ev.s}`;
     $('fstats').innerHTML =
       stat('Class', `${TF.tag(ev.cls)}`) +
@@ -495,7 +528,9 @@
       stat('Decay half-time t<sub>&frac12;</sub>', ev.thalf == null ? '&mdash;' : `${fmt(ev.thalf, 1)} min`) +
       stat('Power-law index &alpha;', ev.fit ? fmt(ev.fit.alpha, 2) + (ev.fit.alpha > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') : '&mdash;') +
       stat('Rise (peak &minus; t<sub>0</sub>)', `${fmt(ev.rise, 0)} min`) +
-      stat('Peaks', `${ev.n_peaks}` + (pk.length ? ` <span class="sub">(${pk.map(q => `${q.kind} ${q.dt >= 0 ? '+' : ''}${fmt(q.dt, 1)} h${q.cat ? '' : ', new'}`).join('; ')})</span>` : '')) +
+      stat('Components', ev.cm && ev.n_comp ? ev.cm.comps.filter(c => c.kept).map(c =>
+        `<span class="nowrap">${c.d >= 0 ? '+' : '&minus;'}${fmt(Math.abs(c.d), 2)} h</span> <span class="sub">(${fmt(100 * c.a, 0)}% of peak, ` +
+        `${fmt(100 * c.f, 0)}% of flux, FWHM ${fmt(c.fwhm * 60, 0)} min, &Delta;BIC ${fmt(c.dbic, 0)})</span>`).join('<br>') : 'none') +
       stat('Detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
         `<span class="nowrap">S${ev.s} ${L.cam}/${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}</span>`).join('<br>') : '&mdash;') +
       stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
@@ -504,7 +539,7 @@
 
   // ---------------- flare table ----------------
   const COLS = [['#', e => e.k + 1], ['Peak (MJD)', e => e.tpk.toFixed(3)], ['Sector', e => e.s], ['Class', e => TF.tag(e.cls)],
-    ['Peaks', e => e.n_peaks], ['S/N', e => fmt(e.snr, 0)], ['&Delta;F/F', e => e.amp == null ? '&mdash;' : sig3(e.amp)],
+    ['Comp.', e => e.n_comp || 0], ['S/N', e => fmt(e.snr, 0)], ['&Delta;F/F', e => e.amp == null ? '&mdash;' : sig3(e.amp)],
     ['ED (s)', e => e.ed == null ? '&mdash;' : sig3(e.ed)], ['t<sub>&frac12;</sub> (min)', e => fmt(e.thalf, 1)],
     ['Rise (min)', e => fmt(e.rise, 0)], ['p<sub>Flare</sub>', e => fmt(pFlare(e), 2)], ['Tier', e => e.tier]];
   function renderTable() {
@@ -566,8 +601,8 @@
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(fit); ro.observe($('overview')); ro.observe($('flarechart')); }
   window.addEventListener('resize', fit);
 
-  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_peaks,snr,amplitude,ed_s,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
-    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_peaks, e.snr, e.amp ?? '', e.ed ?? '',
+  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_components,snr,amplitude,ed_s,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
+    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_comp || 0, e.snr, e.amp ?? '', e.ed ?? '',
       e.thalf ?? '', e.fit ? e.fit.alpha : '', e.rise, '"' + e.loc.map(L => L.name).join('; ') + '"',
       ...['cam', 'ccd', 'cut', 'obj', 'eid'].map(c => '"' + e.loc.map(L => L[c] ?? '').join('; ') + '"')].join(','))).join('\n');
   const blob = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
