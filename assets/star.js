@@ -74,51 +74,56 @@
   // 3 sigma localisation radius (deg): the region the gold host match uses (3 x the 1 sigma per-axis error)
   const R3 = L => 3 * (L.sig1 != null ? L.sig1 : L.r68 / 1.67) / 3600;
   const pFlare = e => e.loc.length ? Math.max(...e.loc.map(L => L.p ?? -1)) : null;
-  try {
-    A.init.then(() => {
-      const survey = S.dec > -29 ? 'P/PanSTARRS/DR1/color-z-zg-g' : 'P/DSS2/color';
-      const al = A.aladin('#aladin', {survey, fov: 3 / 60, target: `${S.ra} ${S.dec}`, cooFrame: 'ICRSd',
-        showReticle: false, showCooGridControl: false, showSettingsControl: false, showShareControl: false,
-        showProjectionControl: false, showFrame: false, showLayersControl: true, showFullscreenControl: true,
-        showGotoControl: false});
-      try {
-        al.addCatalog(A.catalogFromVizieR('I/355/gaiadr3', `${S.ra} ${S.dec}`, 3 / 60,
-          {name: 'Gaia DR3', color: '#8791a3', sourceSize: 9, onClick: 'showTable'}));
-      } catch (e) {}
-      SKY.all = A.graphicOverlay({name: 'flare localisations', color: C('--c-flare'), lineWidth: 1.2});
-      al.addOverlay(SKY.all);
-      SKY.sel = A.graphicOverlay({name: 'selected flare', color: '#ffd1d1', lineWidth: 3});
-      al.addOverlay(SKY.sel);
-      const host = A.catalog({name: 'host star', color: C('--c-host'), sourceSize: 16, shape: 'circle'});
-      al.addCatalog(host);
-      host.addSources([A.source(S.ra, S.dec, {name: `Gaia DR3 ${S.id}`})]);
-      SKY.al = al;
-      // a click on a circle's outline: Aladin picks the shape itself -> select its flare
-      const pick = o => {
-        SKY.picked = Date.now();                       // Aladin handled this click (a circle, or e.g. a Gaia source)
-        const k = SKY.shapes.get(o) ?? (o && o.shapes ? o.shapes.map(x => SKY.shapes.get(x)).find(v => v != null) : undefined);
-        if (k != null) select(k, true);
-      };
-      al.on('objectClicked', pick);
-      // a click inside a circle (or a few pixels outside its outline): nearest centre relative to radius wins
-      al.on('click', c => {
-        if (!c || c.isDragging || c.ra == null || Date.now() - SKY.picked < 400) return;
-        let fov = 3 / 60;
-        try { fov = al.getFov()[0]; } catch (e) {}
-        const margin = 8 * fov / Math.max(1, $('aladin').clientWidth);       // 8 screen pixels, in degrees
-        let best = null, bd = Infinity;
-        for (const e of visible()) for (const L of e.loc) {
-          const d = TF.sepArcmin(c.ra, c.dec, L.ra, L.dec) / 60 / (R3(L) + margin);
-          if (d < bd) { bd = d; best = e; }
-        }
-        if (best && bd <= 1) select(best.k, true);
-      });
-      skyAll();
-      if (SEL != null) skySelect(EV[SEL]);
+  // Aladin Lite is loaded here, not by a <script> tag: it can take seconds to arrive from CDS, and a tag before
+  // star.js held back the whole page (light curve included) until it had
+  const loadScript = src => new Promise((ok, bad) => {
+    const el = document.createElement('script');
+    el.src = src; el.charset = 'utf-8'; el.onload = ok; el.onerror = bad;
+    document.head.appendChild(el);
+  });
+  loadScript('https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js').then(() => A.init).then(() => {
+    const survey = S.dec > -29 ? 'P/PanSTARRS/DR1/color-z-zg-g' : 'P/DSS2/color';
+    const al = A.aladin('#aladin', {survey, fov: 3 / 60, target: `${S.ra} ${S.dec}`, cooFrame: 'ICRSd',
+      showReticle: false, showCooGridControl: false, showSettingsControl: false, showShareControl: false,
+      showProjectionControl: false, showFrame: false, showLayersControl: true, showFullscreenControl: true,
+      showGotoControl: false});
+    try {
+      al.addCatalog(A.catalogFromVizieR('I/355/gaiadr3', `${S.ra} ${S.dec}`, 3 / 60,
+        {name: 'Gaia DR3', color: '#8791a3', sourceSize: 9, onClick: 'showTable'}));
+    } catch (e) {}
+    SKY.all = A.graphicOverlay({name: 'flare localisations', color: C('--c-flare'), lineWidth: 1.2});
+    al.addOverlay(SKY.all);
+    SKY.sel = A.graphicOverlay({name: 'selected flare', color: '#ffd1d1', lineWidth: 3});
+    al.addOverlay(SKY.sel);
+    const host = A.catalog({name: 'host star', color: C('--c-host'), sourceSize: 16, shape: 'circle'});
+    al.addCatalog(host);
+    host.addSources([A.source(S.ra, S.dec, {name: `Gaia DR3 ${S.id}`})]);
+    SKY.al = al;
+    // a click on a circle's outline: Aladin picks the shape itself -> select its flare
+    const pick = o => {
+      SKY.picked = Date.now();                       // Aladin handled this click (a circle, or e.g. a Gaia source)
+      const k = SKY.shapes.get(o) ?? (o && o.shapes ? o.shapes.map(x => SKY.shapes.get(x)).find(v => v != null) : undefined);
+      if (k != null) select(k, true);
+    };
+    al.on('objectClicked', pick);
+    // a click inside a circle (or a few pixels outside its outline): nearest centre relative to radius wins
+    al.on('click', c => {
+      if (!c || c.isDragging || c.ra == null || Date.now() - SKY.picked < 400) return;
+      let fov = 3 / 60;
+      try { fov = al.getFov()[0]; } catch (e) {}
+      const margin = 8 * fov / Math.max(1, $('aladin').clientWidth);       // 8 screen pixels, in degrees
+      let best = null, bd = Infinity;
+      for (const e of visible()) for (const L of e.loc) {
+        const d = TF.sepArcmin(c.ra, c.dec, L.ra, L.dec) / 60 / (R3(L) + margin);
+        if (d < bd) { bd = d; best = e; }
+      }
+      if (best && bd <= 1) select(best.k, true);
     });
-  } catch (e) {
+    skyAll();
+    if (SEL != null) skySelect(EV[SEL]);
+  }).catch(() => {
     $('aladin').innerHTML = '<div class="empty">Sky view unavailable (Aladin Lite did not load).</div>';
-  }
+  });
   function skyAll() {
     if (!SKY.al || !SKY.all) return;
     try { SKY.all.removeAll(); } catch (e) {}
@@ -341,9 +346,15 @@
     let xs = [], ys = [], yf = [];
     const w = ev.w, err = new Map();
     const [i0, i1] = flareFrames(ev);
-    // the main peak as a feature: its rise, from the first frame above the noise to the peak frame
-    const iRise = Math.min(i0 + 1, Math.round((ev.tpk - w.t) / w.dt));
-    const mainSpan = {kind: 'main', x0: (w.t + iRise * w.dt - ev.tpk) * 24, x1: 0};
+    // the main peak as a feature: the frames rising monotonically into the peak frame (from the one after the lowest
+    // point before it), and never into a precursor
+    const ipk = Math.round((ev.tpk - w.t) / w.dt);
+    let iMin = ipk;
+    while (iMin > 0 && w.r[iMin - 1] != null && w.r[iMin - 1] < w.r[iMin]) iMin--;
+    let x0Main = (w.t + Math.min(ipk, iMin + 1) * w.dt - ev.tpk) * 24;
+    for (const sp of ev.spans) if (sp.kind === 'precursor' || (sp.kind === 'possible' && sp.x1 < 0))
+      x0Main = Math.max(x0Main, Math.min(0, sp.x1 + w.dt * 24));
+    const mainSpan = {kind: 'main', x0: x0Main, x1: 0};
     for (let i = 0; i < w.r.length; i++) {
       if (w.r[i] == null) continue;
       const x = (w.t + i * w.dt - ev.tpk) * 24, y = w.r[i] / 10;
