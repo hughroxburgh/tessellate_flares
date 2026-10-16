@@ -575,7 +575,14 @@
     `<a href="${dataURL}" download>Light-curve data behind this page (gzipped JSON: every 10-minute frame with its baseline and noise)</a>`;
 
   if (!EV.some(e => e.tier !== 'gold')) $('show2wrap').hidden = true;
-  if (PERIODIC) $('residlabel').textContent = ' subtract spline baseline'; else $('subperwrap').hidden = true;     // nothing to hide on this star
+  if (PERIODIC) {
+    $('residlabel').textContent = ' subtract spline baseline';
+    if (S.sectors.some(s => s.p_disp)) {        // rotation followed by the fit's spline: split afterwards, for display
+      $('subperwrap').lastChild.textContent = ' subtract periodic baseline (approx.)';
+      $('subperwrap').title = 'This star rotates slowly enough that the baseline fit follows it with its spline. ' +
+        'For display, that baseline is split into a smooth trend and two harmonics at the rotation period.';
+    }
+  } else $('subperwrap').hidden = true;     // nothing to hide on this star
   const f0 = parseInt(P.get('f') || '', 10);
   if (f0 >= 1 && f0 <= EV.length && EV[f0 - 1].tier !== 'gold') $('show2').checked = true;   // linked to a secondary flare
   const startEv = (f0 >= 1 && f0 <= EV.length) ? EV[f0 - 1] : brightest(visible());
