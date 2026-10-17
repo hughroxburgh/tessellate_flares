@@ -11,7 +11,7 @@
   --c-data:#eadfe0; --c-base:#4a86e8; --c-flare:#ff6b6b; --c-peak:#f0b35a; --c-shoulder:#b39aa0;
   --c-pre:#5ec8b4; --c-host:#5ec8b4;   /* baseline cobalt (Hugh); host star in the sky view stays teal */
   /* flare classes; every use also carries the class name as text */
-  --c-simple:#8fb4e6; --c-possible:#e0a458; --c-complex:#ff7b7b; --c-shape:#c4a6f0;
+  --c-simple:#8fb4e6; --c-marginal:#e0a458; --c-possible:#e0a458; --c-complex:#ff7b7b; --c-shape:#c4a6f0;
 }
 *{box-sizing:border-box}
 html{color-scheme:dark}
@@ -89,6 +89,7 @@ table.cat tbody tr.click{cursor:pointer}
 .tag{display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;letter-spacing:.02em;
   white-space:nowrap;border:1px solid transparent}
 .tag.simple{color:var(--c-simple);background:#8fb4e61a;border-color:#8fb4e647}
+.tag.marginal{color:var(--c-marginal);background:#e0a4581c;border-color:#e0a45847}
 .tag.possible{color:var(--c-possible);background:#e0a4581c;border-color:#e0a45847}
 .tag.complex{color:var(--c-complex);background:#ff7b7b1f;border-color:#ff7b7b52}
 .tag.shape{color:var(--c-shape);background:#c4a6f01f;border-color:#c4a6f04d}

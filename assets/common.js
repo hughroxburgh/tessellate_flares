@@ -11,7 +11,7 @@ const TF = (() => {
     const e = Math.floor(Math.log10(a)), m = v / 10 ** e;
     return `${m.toFixed(2)}&times;10<sup>${e}</sup>`;
   }
-  const CLASS_LABEL = {simple: 'simple', possible: 'possible', complex: 'complex', shape: 'shape'};
+  const CLASS_LABEL = {simple: 'simple', marginal: 'marginal', complex: 'complex', possible: 'possible', shape: 'shape'};
   const tag = c => c ? `<span class="tag ${c}">${CLASS_LABEL[c] || c}</span>` : '&mdash;';
   const shard = id => String(id).slice(-4, -2);   // Gaia IDs end in a multiple of 4: use digits 3-4 from the end
   const starURL = (id, prefix = '') => `${prefix}star.html?id=${id}`;
