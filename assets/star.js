@@ -344,7 +344,8 @@
     const comps = kept.map(c => avg(t => c.p[1] * compShape(t - c.p[0], c.p)));
     const tot = main.map((v, i) => v + comps.reduce((a, c) => a + c[i], 0));
     const from = (arr, t0) => arr.map((v, i) => xh[i] < t0 - cadh / 2 ? null : v);       // null before the onset
-    return {main: from(main, p[0] - p[2]), comps: comps.map((c, j) => from(c, kept[j].p[0] - kept[j].p[2])), tot};
+    return {main: from(main, p[0] - p[2]), comps: comps.map((c, j) => from(c, kept[j].p[0] - kept[j].p[2])), tot,
+            sig: kept.map(c => c.sig)};
   }
   // flare features in the inset: one colour for all of them, named inside their shaded regions
   const FEAT = 'rgba(255,214,110,0.16)', FEAT_TEXT = '#f3d58a';
@@ -413,7 +414,8 @@
       const cmod = compModel(xm, ev.cm, w.dt * 24);
       data = uPlot.join([[xs, ys, yf], [xm, cmod.main, ...cmod.comps]]);
       series.push({stroke: C('--c-base'), width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}},
-                  ...cmod.comps.map(() => ({stroke: '#f3c35a', width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}})));
+                  ...cmod.sig.map(sig => sig ? {stroke: '#f3c35a', width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}}    // significant
+                                             : {stroke: 'rgba(243,195,90,0.6)', width: 1.4, dash: [2, 4], spanGaps: false, points: {show: false}}));  // marginal
     } else data = [xs, ys, yf];
     const showFeat = false;                             // (the old rule-based feature shading is retired)
     const cadh = w.dt * 24;
@@ -477,10 +479,13 @@
   // ---------------- selected-flare details ----------------
   function reason(ev) {
     if (ev.cm) {
-      const kept = ev.cm.comps.filter(c => c.kept), n2 = ev.cm.comps.length - kept.length;
-      const rej = n2 ? ` <span class="sub">(${n2} candidate${n2 > 1 ? 's' : ''} not significant)</span>` : '';
-      return kept.length ? `${kept.length} significant extra component${kept.length > 1 ? 's' : ''} in the fit (&Delta;BIC &gt; 10)` + rej
-                         : 'no significant extra component in the fit' + rej;
+      const ns = ev.n_comp || 0, nm = ev.n_marg || 0, n2 = ev.cm.comps.filter(c => !c.kept).length;
+      const parts = [];
+      if (ns) parts.push(`${ns} significant extra component${ns > 1 ? 's' : ''}`);
+      if (nm) parts.push(`${nm} marginal`);
+      const rej = n2 ? ` <span class="sub">(${n2} more candidate${n2 > 1 ? 's' : ''} rejected)</span>` : '';
+      return (parts.length ? parts.join(' + ') + ' in the fit' : 'no extra component in the fit') + rej +
+        '<br><span class="sub">significant: &Delta;&chi;&sup2; &gt; 20; marginal: 10&ndash;20</span>';
     }
     return 'no extra component found';
   }
@@ -500,9 +505,9 @@
         (ev.cm.p[4] > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') :
         `double exponential <span class="sub">(${fmt(ev.cm.p[3] * 60, 0)} and ${fmt(ev.cm.p[4] * 60, 0)} min, slow part ${fmt(100 * ev.cm.p[5], 0)}%)</span>`) +
       stat('Rise (peak &minus; t<sub>0</sub>)', `${fmt(ev.rise, 0)} min`) +
-      stat('Components', ev.cm && ev.n_comp ? ev.cm.comps.filter(c => c.kept).map(c =>
-        `<span class="nowrap">${c.d >= 0 ? '+' : '&minus;'}${fmt(Math.abs(c.d), 2)} h</span> <span class="sub">(${fmt(100 * c.a, 0)}% of peak, ` +
-        `${fmt(100 * c.f, 0)}% of flux, FWHM ${fmt(c.fwhm * 60, 0)} min, &Delta;BIC ${fmt(c.dbic, 0)})</span>`).join('<br>') : 'none') +
+      stat('Components', ev.cm && (ev.n_comp || ev.n_marg) ? ev.cm.comps.filter(c => c.kept).map(c =>
+        `<span class="nowrap">${c.d >= 0 ? '+' : '&minus;'}${fmt(Math.abs(c.d), 2)} h${c.sig ? '' : ' (marginal)'}</span> <span class="sub">(${fmt(100 * c.a, 0)}% of peak, ` +
+        `${fmt(100 * c.f, 0)}% of flux, FWHM ${fmt(c.fwhm * 60, 0)} min, &Delta;&chi;&sup2; ${fmt(c.dchi2, 0)})</span>`).join('<br>') : 'none') +
       stat('Detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
         `<span class="nowrap">S${ev.s} ${L.cam}/${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}</span>`).join('<br>') : '&mdash;') +
       stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
@@ -511,7 +516,7 @@
 
   // ---------------- flare table ----------------
   const COLS = [['#', e => e.k + 1], ['Peak (MJD)', e => e.tpk.toFixed(3)], ['Sector', e => e.s], ['Class', e => TF.tag(e.cls)],
-    ['Comp.', e => e.n_comp || 0], ['S/N', e => fmt(e.snr, 0)], ['&Delta;F/F', e => e.amp == null ? '&mdash;' : sig3(e.amp)],
+    ['Comp.', e => `${e.n_comp || 0}` + (e.n_marg ? ` <span class="sub">(+${e.n_marg})</span>` : '')], ['S/N', e => fmt(e.snr, 0)], ['&Delta;F/F', e => e.amp == null ? '&mdash;' : sig3(e.amp)],
     ['ED (s)', e => e.ed == null ? '&mdash;' : sig3(e.ed)], ['t<sub>&frac12;</sub> (min)', e => fmt(e.thalf, 1)],
     ['Rise (min)', e => fmt(e.rise, 0)], ['p<sub>Flare</sub>', e => fmt(pFlare(e), 2)], ['Tier', e => e.tier]];
   function renderTable() {
@@ -572,8 +577,8 @@
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(fit); ro.observe($('overview')); ro.observe($('flarechart')); }
   window.addEventListener('resize', fit);
 
-  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_components,snr,amplitude,ed_s,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
-    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_comp || 0, e.snr, e.amp ?? '', e.ed ?? '',
+  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_components,n_marginal,snr,amplitude,ed_s,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
+    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_comp || 0, e.n_marg || 0, e.snr, e.amp ?? '', e.ed ?? '',
       e.thalf ?? '', e.fit ? e.fit.alpha : '', e.rise, '"' + e.loc.map(L => L.name).join('; ') + '"',
       ...['cam', 'ccd', 'cut', 'obj', 'eid'].map(c => '"' + e.loc.map(L => L[c] ?? '').join('; ') + '"')].join(','))).join('\n');
   const blob = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
