@@ -13,7 +13,8 @@ const TF = (() => {
   }
   const CLASS_LABEL = {simple: 'simple', marginal: 'marginal', complex: 'complex', possible: 'possible', shape: 'shape'};
   const tag = c => c ? `<span class="tag ${c}">${CLASS_LABEL[c] || c}</span>` : '&mdash;';
-  const shard = id => String(id).slice(-4, -2);   // Gaia IDs end in a multiple of 4: use digits 3-4 from the end
+  // the data shard a star is in (build_site.shard_of must agree): digits 3-5 from the end (Gaia IDs end in a multiple of 4)
+  const shard = (id, n) => parseInt(String(id).slice(-5, -2), 10) % n;
   const starURL = (id, prefix = '') => `${prefix}star.html?id=${id}`;
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -33,7 +34,9 @@ const TF = (() => {
   async function getGz(url) {
     const r = await fetch(url);
     if (!r.ok) throw new Error(`${r.status} ${url}`);
-    const buf = new Uint8Array(await r.arrayBuffer());
+    return inflateJSON(new Uint8Array(await r.arrayBuffer()));
+  }
+  async function inflateJSON(buf) {
     let text;
     if (buf[0] === 0x1f && buf[1] === 0x8b) {
       if (!('DecompressionStream' in window)) throw new Error('this browser cannot decompress the data');
@@ -41,6 +44,23 @@ const TF = (() => {
       text = await new Response(new Blob([buf]).stream().pipeThrough(ds)).text();
     } else text = new TextDecoder().decode(buf);
     return JSON.parse(text);
+  }
+  // one star: its [offset, length] from the shard index (beside the pages), then just those bytes of the shard file
+  // (beside the pages, or on Hugging Face / Zenodo: summary.shards.base) with a Range request; a server that ignores
+  // Range (python -m http.server) sends the whole shard and the record is cut out here.
+  // Returns {S: star JSON, gz: its gzipped bytes} or null when the star isn't in the catalogue.
+  async function getStar(id, prefix = '') {
+    const s = await summary(prefix), n = s.shards.n, k = shard(id, n);
+    const idx = await fetch(`${prefix}data/shards/${k}.json?v=${s.v}`).then(r => r.json());
+    const rec = idx[id];
+    if (!rec) return null;
+    const [off, len] = rec;
+    const url = s.shards.base ? `${s.shards.base}${k}.bin` : `${prefix}data/shards/${k}.bin?v=${s.v}`;
+    const r = await fetch(url, {headers: {Range: `bytes=${off}-${off + len - 1}`}});
+    if (!r.ok) throw new Error(`${r.status} ${url}`);
+    let buf = new Uint8Array(await r.arrayBuffer());
+    if (r.status !== 206) buf = buf.slice(off, off + len);
+    return {S: await inflateJSON(buf), gz: buf};
   }
   // "RA Dec [radius arcmin]" in decimal degrees -> cone; otherwise null
   function parseCone(q) {
@@ -96,6 +116,6 @@ const TF = (() => {
       `<td>${fmt(o.p, 2)}</td><td>${o.s.join(', ')}</td>` +
       (o.sep != null ? `<td>${fmt(o.sep, 2)}&prime;</td>` : '') + `</tr>`;
   }
-  return {fmt, int, sig3, tag, shard, starURL, esc, summary, index, getGz, parseCone, sepArcmin,
+  return {fmt, int, sig3, tag, shard, starURL, esc, summary, index, getGz, getStar, parseCone, sepArcmin,
           mjdToUTC, filterSort, row};
 })();

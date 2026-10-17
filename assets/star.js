@@ -1,4 +1,4 @@
-// Star page: one template for every star, filled from data/stars/<digits 3-4 from the end>/<gaia id>.json.gz.
+// Star page: one template for every star, filled from the star's record in a data shard (TF.getStar).
 // Needs common.js (TF), uPlot and Aladin Lite (both from CDNs; the page still works without Aladin).
 (async function () {
   const $ = id => document.getElementById(id);
@@ -17,11 +17,12 @@
 
   let S, dataURL;
   try {
-    const sum = await TF.summary();
-    dataURL = `data/stars/${TF.shard(id)}/${id}.json.gz`;
-    S = await TF.getGz(`${dataURL}?v=${sum.v}`);
+    const got = await TF.getStar(id);
+    if (!got) return fail(`Gaia DR3 <span class="mono">${TF.esc(id)}</span> has no page in this catalogue.`);
+    S = got.S;
+    dataURL = URL.createObjectURL(new Blob([got.gz], {type: 'application/gzip'}));   // the download link below
   } catch (e) {
-    return fail(`Gaia DR3 <span class="mono">${TF.esc(id)}</span> has no page in this catalogue.`);
+    return fail(`The data for Gaia DR3 <span class="mono">${TF.esc(id)}</span> could not be loaded (${TF.esc(e.message)}).`);
   }
   const EV = S.events;
   const PERIODIC = S.sectors.some(s => s.p);       // baseline has a periodic (rotation) part to subtract separately
@@ -583,7 +584,7 @@
       ...['cam', 'ccd', 'cut', 'obj', 'eid'].map(c => '"' + e.loc.map(L => L[c] ?? '').join('; ') + '"')].join(','))).join('\n');
   const blob = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
   $('dl').innerHTML = `<a href="${blob}" download="gaia_dr3_${S.id}_flares.csv">This star's flares (CSV)</a>` +
-    `<a href="${dataURL}" download>Light-curve data behind this page (gzipped JSON: every 10-minute frame with its baseline and noise)</a>`;
+    `<a href="${dataURL}" download="gaia_dr3_${S.id}.json.gz">Light-curve data behind this page (gzipped JSON: every 10-minute frame with its baseline and noise)</a>`;
 
   if (!EV.some(e => e.tier !== 'gold')) $('show2wrap').hidden = true;
   if (PERIODIC) {
