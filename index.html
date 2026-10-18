@@ -2,7 +2,7 @@
 <title>TESSELLATE flare star catalogue</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Stellar flares found in TESS full-frame images by the TESSELLATE transient search, with every flare star's TESSELLATE light curve.">
-<link rel="stylesheet" href="assets/site.css?v=17">
+<link rel="stylesheet" href="assets/site.css?v=26">
 <main>
   <p class="eyebrow" id="eyebrow">TESSELLATE &middot; TESS full-frame images</p>
   <h1>Stellar flare catalogue</h1>
@@ -33,10 +33,10 @@
 
   <h2>The population</h2>
   <div class="figs" id="figs">
-    <figure id="skyfig" class="wide"><img src="assets/fig_sky.png" alt="Sky positions of the flare stars"><figcaption id="cap_sky">Where the flare stars are on the sky.</figcaption></figure>
-    <figure><img src="assets/fig_cmd.png" alt="Colour-magnitude diagram coloured by flare rate"><figcaption id="cap_cmd">Gaia colour&ndash;magnitude diagram of the flare stars, coloured by flare rate.</figcaption></figure>
-    <figure><img src="assets/fig_ed.png" alt="Distribution of flare equivalent durations"><figcaption id="cap_ed">Flare equivalent durations, simple and complex flares.</figcaption></figure>
+    <figure id="skyfig"><img src="assets/fig_sky.png" alt="Sky positions of the flare stars"><figcaption id="cap_sky">Where the flare stars are on the sky.</figcaption></figure>
     <figure><img src="assets/fig_stack.png" alt="All simple flares stacked"><figcaption id="cap_stack">Simple flares stacked: time in units of each flare's decay half-time, flux relative to its peak frame, with the Davenport et al. (2014) template for comparison.</figcaption></figure>
+    <figure><img src="assets/fig_ed.png" alt="Distribution of flare equivalent durations"><figcaption id="cap_ed">Flare equivalent durations, simple and complex flares.</figcaption></figure>
+    <figure><img src="assets/fig_cmd.png" alt="Colour-magnitude diagram coloured by flare rate"><figcaption id="cap_cmd">Gaia colour&ndash;magnitude diagram of the flare stars, coloured by flare rate.</figcaption></figure>
   </div>
 
   <h2>What is on a star page</h2>
@@ -51,9 +51,9 @@
 
   <footer>Also from TESSELLATE: <a href="https://cheerfuluser.github.io/tessellate_asteroid/">the asteroid rotation &amp; shape catalogue</a>. &middot; <span id="build"></span></footer>
 </main>
-<script src="assets/common.js?v=17"></script>
+<script src="assets/common.js?v=26"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="assets/sky.js?v=17"></script>
+<script src="assets/sky.js?v=26"></script>
 <script>
 const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
 let DATA = [], sortKey = 'n', sortDir = -1;
