@@ -177,17 +177,19 @@
 
   // ---------------- views: one sector, or all sectors end to end ----------------
   // A view maps real time (MJD) to a plot coordinate. One sector: identity. All sectors: each sector keeps its own
-  // time scale, the gaps between sectors are collapsed to GAP and marked with a break (//) on the time axis.
+  // time scale; consecutive sectors (S27 -> S28) keep their real gap (~1 d, like an orbit gap), other gaps are
+  // collapsed to GAP and marked with a break (//) on the time axis.
   function makeView(secs) {
     const segs = [];
     const span = secs.reduce((a, s) => a + s.f.length * s.dt, 0);
     const gap = secs.length > 1 ? Math.max(0.8, 0.035 * span) : 0;
-    let off = null;
+    let prev = null;
     for (const s of secs) {
       const t0 = s.t - s.dt / 2, t1 = s.t + (s.f.length - 0.5) * s.dt;
-      if (off === null) off = t0;
-      segs.push({s: s.s, sec: s, t0, t1, p0: off, p1: off + (t1 - t0)});
-      off += (t1 - t0) + gap;
+      const contig = prev !== null && s.s === prev.s + 1;
+      const p0 = prev === null ? t0 : prev.p1 + (contig ? Math.max(0, t0 - prev.t1) : gap);
+      prev = {s: s.s, sec: s, t0, t1, p0, p1: p0 + (t1 - t0), contig};
+      segs.push(prev);
     }
     return {key: secs.length > 1 ? 'all' : secs[0].s, segs};
   }
@@ -234,7 +236,7 @@
   }
   // time axis: ticks at round MJDs inside each sector, labelled with the real MJD
   function timeAxis(V) {
-    return Object.assign(axis(V.segs.length > 1 ? 'MJD (gaps between sectors removed)' : 'MJD', 40), {
+    return Object.assign(axis(V.segs.some(g => g.p0 > V.segs[0].p0 && !g.contig) ? 'MJD (gaps between sectors removed)' : 'MJD', 40), {
       space: 90,
       splits: (u, ai, min, max, incr) => {
         const out = [];
@@ -261,12 +263,14 @@
     }
     ctx.restore();
   }
-  // sector gaps: a faint band, a // break on the time axis, and each sector's name at its start
+  // collapsed sector gaps: a faint band and a // break on the time axis (not between consecutive sectors, whose real
+  // gap is shown); each sector's name at its start
   function drawGaps(u, V) {
     const ctx = u.ctx, dpr = devicePixelRatio || 1, L = u.bbox.left, Rr = L + u.bbox.width;
     const top = u.bbox.top, bot = top + u.bbox.height;
     ctx.save();
     for (let j = 1; j < V.segs.length; j++) {
+      if (V.segs[j].contig) continue;
       const a = u.valToPos(V.segs[j - 1].p1, 'x', true), b = u.valToPos(V.segs[j].p0, 'x', true);
       if (b < L || a > Rr) continue;
       ctx.fillStyle = 'rgba(244,234,235,0.035)';
