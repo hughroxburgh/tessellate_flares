@@ -251,8 +251,29 @@
   // Flare bins (plus one either side, so even a one-bin flare draws as a red spike) form their own series.
   // The baseline is a slow spline plus, for some rotators, a periodic part (sector field p; spline = b - p). Each can
   // be subtracted on its own (sub = {spline, periodic}); the baseline line shows whatever part is left.
+  // a lone frame far off the baseline whose neighbours are normal: a bad difference image (e.g. the last frames of
+  // S30 camera 4 throw every star there), not light from the star. Hidden from the plots; catalogued flares never are.
+  const SPIKE_Z = 25, SPIKE_NB_Z = 5;
+  function spikes(s, fl) {
+    const n = s.f.length, r = new Array(n).fill(null), out = new Array(n).fill(false), v = [];
+    for (let i = 0; i < n; i++) if (s.f[i] != null && s.b[i] != null) { r[i] = s.f[i] - s.b[i]; v.push(r[i]); }
+    if (v.length < 20) return out;
+    v.sort((a, b) => a - b);
+    const med = v[v.length >> 1], dev = v.map(x => Math.abs(x - med)).sort((a, b) => a - b);
+    const sig = 1.4826 * dev[dev.length >> 1];
+    if (!(sig > 0)) return out;
+    const z = i => r[i] == null ? null : Math.abs(r[i] - med) / sig;
+    for (let i = 0; i < n; i++) {
+      if (fl[i] || !(z(i) > SPIKE_Z)) continue;
+      const nb = [z(i - 1), z(i + 1)].filter(x => x != null);
+      out[i] = nb.length > 0 && nb.every(x => x < SPIKE_NB_Z);
+    }
+    return out;
+  }
+  let HIDDEN = 0;
   function viewData(V, sub, evs) {
     const X = [], Bs = [], F = [], R = [];
+    HIDDEN = 0;
     V.segs.forEach((g, j) => {
       if (j > 0) { X.push((V.segs[j - 1].p1 + g.p0) / 2); Bs.push(null); F.push(null); R.push(null); }
       const s = g.sec, n = s.f.length, fl = new Array(n).fill(false);
@@ -262,8 +283,10 @@
         const i1 = Math.min(n - 1, Math.floor((e.end - s.t) / s.dt + 0.5) + 1);
         for (let i = i0; i <= i1; i++) fl[i] = true;
       }
+      const sp = spikes(s, fl);
       for (let i = 0; i < n; i++) {
-        const f = s.f[i], b = s.b[i], p = s.p ? s.p[i] : 0;
+        const f = sp[i] ? null : s.f[i], b = s.b[i], p = s.p ? s.p[i] : 0;
+        if (sp[i]) HIDDEN++;
         let fv = null, bv = null;
         if (b != null && p != null) {
           const off = (sub.spline ? b - p : 0) + (sub.periodic ? p : 0);       // what is subtracted
@@ -359,6 +382,8 @@
                 const c = MJY ? ` (${(f / KU.get(re.seg.s)).toFixed(1)} e⁻/s)` : '';
                 return `t = ${re.t.toFixed(4)}, f = ${fU(f)} ${UNIT}${c}`; })]},
     }, viewData(V, sub, evs), el);
+    $('spikenote').textContent = HIDDEN ? ` ${HIDDEN === 1 ? 'One isolated frame' : HIDDEN + ' isolated frames'} far off the ` +
+      `baseline with normal neighbours (bad images, not the star) ${HIDDEN === 1 ? 'is' : 'are'} not shown.` : '';
     if (old) OV.setScale('x', {min: old[0], max: old[1]});
     let down = null;
     OV.over.addEventListener('mousedown', e => { down = [e.clientX, e.clientY]; });
