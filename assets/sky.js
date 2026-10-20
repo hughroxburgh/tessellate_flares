@@ -56,6 +56,35 @@ const TFSky = (() => {
     {n: 'N. ecliptic pole (TESS CVZ)', s: 'NEP', ra: 270.0, dec: 66.561, dx: 1, dy: -1},
     {n: 'S. Galactic pole', s: 'SGP', ra: 12.857, dec: -27.128, dx: 1, dy: -1},
     {n: 'N. Galactic pole', s: 'NGP', ra: 192.859, dec: 27.128, dx: 1, dy: -1},
+    // marked objects (J2000): t = marker (oc open cluster, gc globular, sf star-forming region, gx galaxy);
+    // k = zoom from which they appear; list order = label priority
+    {n: 'Pleiades', ra: 56.75, dec: 24.12, t: 'oc', k: 1, dx: 1, dy: -1},
+    {n: 'Hyades', ra: 66.75, dec: 15.87, t: 'oc', k: 1.6, dx: -1, dy: 1},
+    {n: 'Orion Nebula', ra: 83.82, dec: -5.39, t: 'sf', k: 1, dx: 1, dy: 1},
+    {n: 'ω Centauri', ra: 201.70, dec: -47.48, t: 'gc', k: 1, dx: 1, dy: -1},
+    {n: 'Andromeda (M31)', ra: 10.68, dec: 41.27, t: 'gx', k: 1, dx: 1, dy: -1},
+    {n: '47 Tucanae', ra: 6.02, dec: -72.08, t: 'gc', k: 1.6, dx: 1, dy: -1},
+    {n: 'Praesepe', ra: 130.10, dec: 19.67, t: 'oc', k: 1.6, dx: 1, dy: -1},
+    {n: 'Upper Scorpius', ra: 243.0, dec: -23.4, t: 'sf', k: 1.6, dx: -1, dy: -1},
+    {n: 'Taurus clouds', ra: 67.5, dec: 25.5, t: 'sf', k: 1.6, dx: -1, dy: -1},
+    {n: 'α Persei', ra: 51.73, dec: 49.12, t: 'oc', k: 1.6, dx: 1, dy: -1},
+    {n: 'IC 2602', ra: 160.74, dec: -64.40, t: 'oc', k: 1.6, dx: 1, dy: 1},
+    {n: 'IC 2391', ra: 130.13, dec: -53.04, t: 'oc', k: 1.6, dx: 1, dy: -1},
+    {n: 'Carina Nebula', ra: 161.27, dec: -59.87, t: 'sf', k: 2.5, dx: -1, dy: -1},
+    {n: 'Chamaeleon I', ra: 167.0, dec: -77.0, t: 'sf', k: 2.5, dx: 1, dy: 1},
+    {n: 'ρ Ophiuchi', ra: 246.8, dec: -24.5, t: 'sf', k: 2.5, dx: 1, dy: 1},
+    {n: 'Lupus clouds', ra: 239.0, dec: -38.5, t: 'sf', k: 2.5, dx: 1, dy: 1},
+    {n: 'Coma Berenices', ra: 186.0, dec: 26.0, t: 'oc', k: 2.5, dx: -1, dy: 1},
+    {n: 'NGC 2516', ra: 119.52, dec: -60.75, t: 'oc', k: 2.5, dx: -1, dy: 1},
+    {n: 'NGC 2547', ra: 122.60, dec: -49.20, t: 'oc', k: 2.5, dx: -1, dy: 1},
+    {n: 'Blanco 1', ra: 1.03, dec: -29.83, t: 'oc', k: 2.5, dx: 1, dy: -1},
+    {n: 'M7', ra: 268.46, dec: -34.79, t: 'oc', k: 2.5, dx: 1, dy: 1},
+    {n: 'M67', ra: 132.83, dec: 11.80, t: 'oc', k: 2.5, dx: 1, dy: 1},
+    {n: 'Triangulum (M33)', ra: 23.46, dec: 30.66, t: 'gx', k: 2.5, dx: 1, dy: 1},
+    {n: 'NGC 6397', ra: 265.18, dec: -53.67, t: 'gc', k: 2.5, dx: 1, dy: -1},
+    {n: 'M4', ra: 245.90, dec: -26.53, t: 'gc', k: 2.5, dx: -1, dy: 1},
+    {n: 'M22', ra: 279.10, dec: -23.90, t: 'gc', k: 2.5, dx: 1, dy: -1},
+    {n: 'M13', ra: 250.42, dec: 36.46, t: 'gc', k: 2.5, dx: 1, dy: -1},
   ];
   const FULL_NAMES_K = 2.5;                         // zoom from which the full names are written
   const PLANE_LABEL = {ra: 300.4, dec: 32.6};       // 'Galactic plane' written beside the line here (l = 70 deg, Cygnus)
@@ -121,11 +150,13 @@ const TFSky = (() => {
     const cap = fig.querySelector('figcaption');
     if (cap) cap.innerHTML = `The ${stars.length.toLocaleString()} flare stars on the sky, seen from inside the celestial sphere ` +
       `(RA increases to the left; Galactic plane dashed). Zoomed out: how many stars fall in each ${CELL}° cell; ` +
-      `zoomed in: each star, sized by its number of flares and coloured by its flare rate.`;
+      `zoomed in: each star, sized by its number of flares and coloured by its flare rate. Marked: open clusters (○), ` +
+      `globular clusters (⊕), star-forming regions (◇) and nearby galaxies; more appear as you zoom in.`;
     const $ = s => wrap.querySelector(s);
     const canvas = $('canvas'), ctx = canvas.getContext('2d'), tip = $('.sky-tip'), stage = $('.sky-stage');
     const gal = galacticPlane();
 
+    let boxes = [];                        // screen boxes of the feature labels and markers, so grid labels avoid them
     let mode = 'moll', proj = null, path = null, W = 0, H = 0, S0 = 1, K = 1, T = d3.zoomIdentity, shown = [], hover = null;
     const rot = home.slice();             // globe orientation
     const rotM = [0, 0];                  // Mollweide rotation [lambda, phi]: drag sideways turns the sky in RA, up/down
@@ -212,7 +243,11 @@ const TFSky = (() => {
       ctx.font = `10px "Azeret Mono", ui-monospace, monospace`; ctx.fillStyle = C('--text-dim');
       ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
       ctx.strokeStyle = 'rgba(16,5,8,0.9)'; ctx.lineWidth = 3;
-      const put = (txt, p) => { ctx.strokeText(txt, p[0] + 3, p[1] - 2); ctx.fillText(txt, p[0] + 3, p[1] - 2); };
+      const put = (txt, p) => {
+        const w = ctx.measureText(txt).width, x = p[0] + 3, y = p[1] - 2;
+        if (boxes.some(q => x < q[2] && x + w > q[0] && y - 11 < q[3] && y > q[1])) return;   // a feature is there
+        ctx.strokeText(txt, x, y); ctx.fillText(txt, x, y);
+      };
       const every = Math.max(1, Math.ceil(45 / (step * pxPerDeg * (mode === 'moll' ? 0.9 : 1))));   // label every Nth line
       const mid = proj.invert([W / 2, H / 2]);
       const vis = ll => {                  // on screen, on the map, and (globe) on the near side, not behind it
@@ -230,7 +265,7 @@ const TFSky = (() => {
       }
     }
 
-    function features() {                 // the Magellanic Clouds, poles, Galactic centre; after the stars, before the grid labels
+    function features() {                 // the Magellanic Clouds, poles, Galactic centre, clusters etc.; after the stars, before the grid labels
       const mid = proj.invert([W / 2, H / 2]);
       const at = (ra, dec) => {             // screen point, if on the map and (globe) on the near side
         const ll = [-ra, dec];
@@ -244,18 +279,31 @@ const TFSky = (() => {
         ctx.beginPath(); path(d3.geoCircle().center([-f.ra, f.dec]).radius(f.r)()); ctx.stroke();
       }
       ctx.setLineDash([]);
-      for (const f of FEATURES) {           // small crosses for the points
-        const p = at(f.ra, f.dec); if (!p || f.r) continue;
+      const zoomedIn = f => K >= (f.k || 0);
+      const marker = (t, x, y) => {         // cross for the reference points, a shape per object type
+        ctx.beginPath();
+        if (t === 'oc') ctx.arc(x, y, 3.5, 0, 2 * Math.PI);
+        else if (t === 'gc') { ctx.arc(x, y, 3.5, 0, 2 * Math.PI); ctx.moveTo(x - 3.5, y); ctx.lineTo(x + 3.5, y); ctx.moveTo(x, y - 3.5); ctx.lineTo(x, y + 3.5); }
+        else if (t === 'sf') { ctx.moveTo(x, y - 4.5); ctx.lineTo(x + 4.5, y); ctx.lineTo(x, y + 4.5); ctx.lineTo(x - 4.5, y); ctx.closePath(); }
+        else if (t === 'gx') ctx.ellipse(x, y, 5, 2.4, -0.5, 0, 2 * Math.PI);
+        else { ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4); }
+        ctx.stroke();
+      };
+      for (const f of FEATURES) {
+        const p = at(f.ra, f.dec); if (!p || f.r || !zoomedIn(f)) continue;
         for (const lw of [3.5, 1.3]) {
           ctx.lineWidth = lw; ctx.strokeStyle = lw > 2 ? 'rgba(16,5,8,0.92)' : '#f4eaeb';
-          ctx.beginPath(); ctx.moveTo(p[0] - 4, p[1]); ctx.lineTo(p[0] + 4, p[1]); ctx.moveTo(p[0], p[1] - 4); ctx.lineTo(p[0], p[1] + 4); ctx.stroke();
+          marker(f.t, p[0], p[1]);
         }
       }
       ctx.font = 'italic 11px "Instrument Sans", system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-      const boxes = [];
+      boxes = [];
+      for (const f of FEATURES) {           // markers first, so no label covers one
+        const p = at(f.ra, f.dec); if (p && !f.r && zoomedIn(f)) boxes.push([p[0] - 5, p[1] - 5, p[0] + 5, p[1] + 5, f]);
+      }
       // write txt beside (x, y), on side sx (+1 right, -1 left) and sy (+1 below, -1 above), flipped to stay on the
       // canvas; skipped if it would overlap a label already written
-      const write = (txt, x, y, sx, sy, gap, col) => {
+      const write = (txt, x, y, sx, sy, gap, col, own) => {   // own: this label's feature (its marker may touch)
         const w = ctx.measureText(txt).width, h = 12;
         if (sx > 0 && x + gap + w > W - 4) sx = -1;
         if (sx < 0 && x - gap - w < 4) sx = 1;
@@ -263,16 +311,17 @@ const TFSky = (() => {
         if (sy > 0 && y + gap + h > H - 2) sy = -1;
         const x0 = sx > 0 ? x + gap : x - gap - w, yc = y + sy * (gap * 0.6 + h / 2);
         const box = [x0 - 2, yc - h / 2 - 1, x0 + w + 2, yc + h / 2 + 1];
-        if (boxes.some(q => box[0] < q[2] && box[2] > q[0] && box[1] < q[3] && box[3] > q[1])) return;
+        if (x0 < 2 || x0 + w > W - 2) return;   // object just off the edge: no cut-off label
+        if (boxes.some(q => q[4] !== own && box[0] < q[2] && box[2] > q[0] && box[1] < q[3] && box[3] > q[1])) return;
         boxes.push(box);
         ctx.textAlign = 'left'; ctx.strokeStyle = 'rgba(16,5,8,0.92)'; ctx.lineWidth = 3.5;
         ctx.strokeText(txt, x0, yc); ctx.fillStyle = col; ctx.fillText(txt, x0, yc);
       };
       const full = K >= FULL_NAMES_K;
       for (const f of FEATURES) {
-        const p = at(f.ra, f.dec); if (!p) continue;
+        const p = at(f.ra, f.dec); if (!p || !zoomedIn(f)) continue;
         const r = f.r ? f.r * RAD * proj.scale() : 0;
-        write(full ? f.n : f.s, p[0], p[1], f.dx, f.dy, f.r ? r * 0.75 + 2 : 5, '#f4eaeb');
+        write(full || !f.s ? f.n : f.s, p[0], p[1], f.dx, f.dy, f.r ? r * 0.75 + 2 : 6, f.t ? '#e6d2d5' : '#f4eaeb', f);
       }
       const q = at(PLANE_LABEL.ra, PLANE_LABEL.dec);
       if (q) write('Galactic plane', q[0], q[1], 1, -1, 5, C('--c-base'));
