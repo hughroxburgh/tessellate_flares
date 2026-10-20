@@ -51,7 +51,7 @@
   const sgn = v => (v >= 0 ? '+' : '&minus;') + Math.abs(v).toFixed(5);
   $('subtitle').innerHTML = `RA ${S.ra.toFixed(5)}&deg;, Dec ${sgn(S.dec)}&deg; &middot; ` +
     `${EV.length} flare${EV.length === 1 ? '' : 's'} in TESS sector${MULTI ? 's' : ''} ` +
-    S.sectors.map(s => s.s).join(', ');
+    TF.ranges(S.sectors.map(s => s.s));
 
   // ---------------- state ----------------
   let SEL = null, VIEW = null, OV = null, FC = null;

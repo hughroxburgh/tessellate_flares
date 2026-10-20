@@ -108,14 +108,25 @@ const TF = (() => {
     }
     return {list: L, cone};
   }
+  // sector list as runs: [27, 28, 29, 31, 33, 34] -> '27–29, 31, 33–34'
+  function ranges(L) {
+    const s = [...L].sort((a, b) => a - b), out = [];
+    for (let i = 0; i < s.length; i++) {
+      let j = i;
+      while (j + 1 < s.length && s[j + 1] === s[j] + 1) j++;
+      out.push(j > i ? `${s[i]}–${s[j]}` : `${s[i]}`);
+      i = j;
+    }
+    return out.join(', ');
+  }
   // catalogue table row (home + browse)
   function row(o, prefix = '') {
     return `<tr><td><a href="${starURL(o.i, prefix)}" class="mono">${o.i}</a></td>` +
       `<td>${fmt(o.g, 2)}</td><td>${fmt(o.c, 2)}</td><td>${o.n}</td><td>${o.x || 0}</td>` +
       `<td>${fmt(o.rt, 3)}</td><td>${o.e == null ? '&mdash;' : sig3(o.e)}</td>` +
-      `<td>${fmt(o.p, 2)}</td><td>${o.s.join(', ')}</td>` +
+      `<td>${fmt(o.p, 2)}</td><td>${ranges(o.s)}</td>` +
       (o.sep != null ? `<td>${fmt(o.sep, 2)}&prime;</td>` : '') + `</tr>`;
   }
   return {fmt, int, sig3, tag, shard, starURL, esc, summary, index, getGz, getStar, parseCone, sepArcmin,
-          mjdToUTC, filterSort, row};
+          mjdToUTC, filterSort, row, ranges};
 })();
