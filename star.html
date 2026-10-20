@@ -22,7 +22,7 @@
       <p class="sec" style="margin:0">TESSELLATE light curve</p>
       <div class="tabs" id="tabs" role="group" aria-label="Sector"></div>
       <div class="toggles">
-        <label class="toggle" id="show2wrap"><input type="checkbox" id="show2"> show secondary flares</label>
+        <label class="toggle" id="show2wrap"><input type="checkbox" id="show2"> show secondary &amp; recovered flares</label>
         <label class="toggle"><input type="checkbox" id="showbase" checked> show baseline</label>
         <label class="toggle" id="subperwrap" title="The baseline's rotation part"><input type="checkbox" id="subper"> subtract periodic baseline</label>
         <label class="toggle" title="The baseline's slow trend (with no rotation term, the whole baseline)"><input type="checkbox" id="resid"><span id="residlabel"> subtract baseline</span></label>
@@ -52,7 +52,7 @@
     <p class="sec">Flares on this star</p>
     <div class="tablewrap"><table class="cat" id="ftable"></table></div>
     <p class="hint" id="fhidden"></p>
-    <p class="hint">Times are MJD at the brightest 10-minute frame. ED: equivalent duration, the flare's energy in seconds of the star's quiescent output in the TESS band. Gold flares host-matched at p<sub>Flare</sub> &ge; 0.9; secondary flares are other flares on a gold star.</p>
+    <p class="hint">Times are MJD at the brightest 10-minute frame. ED: equivalent duration, the flare's energy in seconds of the star's quiescent output in the TESS band. Gold flares: p<sub>Flare</sub> &ge; 0.9, confidently matched to this star. Secondary flares: other flares (p<sub>Flare</sub> 0.6&ndash;0.9) confidently matched to it. Recovered flares: events the classifier called Unsure or Variable (often a flare on a rotation maximum) that pass a flare check on this star&rsquo;s light curve with the rotation removed.</p>
   </section>
 
   <section class="panel" aria-label="Downloads">

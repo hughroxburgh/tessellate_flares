@@ -529,7 +529,7 @@
       visible().map(e => `<tr class="click${e.k === SEL ? ' sel' : ''}" data-k="${e.k}" tabindex="0">` +
                          `${COLS.map(c => `<td>${c[1](e)}</td>`).join('')}</tr>`).join('') + '</tbody>';
     const n2 = EV.length - visible().length;
-    $('fhidden').textContent = n2 ? `${n2} secondary flare${n2 > 1 ? 's' : ''} hidden.` : '';
+    $('fhidden').textContent = n2 ? `${n2} secondary/recovered flare${n2 > 1 ? 's' : ''} hidden.` : '';
   }
   $('ftable').addEventListener('click', e => { const tr = e.target.closest('tr[data-k]'); if (tr) select(+tr.dataset.k, true); });
   $('ftable').addEventListener('keydown', e => {
