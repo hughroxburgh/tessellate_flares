@@ -1,6 +1,7 @@
-/* TESSELLATE flare star catalogue. Same tokens and type as the TESSELLATE asteroid catalogue
-   (cheerfuluser.github.io/tessellate_asteroid) so the two read as one product; the accent is red
-   here where the asteroids use purple. Dark only, like the asteroid site. */
+/* TESSELLATE flare star catalogue. Same tokens as the TESSELLATE asteroid catalogue
+   (cheerfuluser.github.io/tessellate_asteroid); the accent is red here where the asteroids use purple.
+   Type: Instrument Sans + Azeret Mono from Google Fonts (Hugh, 2026-10-20; linked in each page's head).
+   Dark only, like the asteroid site. */
 :root {
   /* dark, dark red ground (Hugh, 2026-10-15) */
   --bg:#130609; --panel:#30141b; --panel-border:#5a2a33; --hairline:#2b1318;
@@ -16,16 +17,16 @@
 *{box-sizing:border-box}
 html{color-scheme:dark}
 body{margin:0;background:var(--bg);color:var(--text);
-  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   -webkit-font-smoothing:antialiased}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.mono{font-family:"Azeret Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 
 main{max-width:980px;margin:0 auto;padding:44px 24px 80px}
 main.wide{max-width:1200px}
-.eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;
+.eyebrow{font-family:"Azeret Mono",ui-monospace,monospace;font-size:11px;letter-spacing:.08em;
   text-transform:uppercase;color:var(--text-faint);margin:0 0 6px}
 h1{font-size:30px;margin:0 0 8px;letter-spacing:-0.02em;text-wrap:balance}
 h2{font-size:16px;margin:36px 0 10px}
@@ -44,7 +45,7 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--hairline);fon
 /* headline numbers */
 .kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 30px}
 .kpi > div{background:var(--panel);border:1px solid var(--panel-border);border-radius:9px;padding:14px 16px}
-.kpi .v{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:21px;font-variant-numeric:tabular-nums}
+.kpi .v{font-family:"Azeret Mono",ui-monospace,monospace;font-size:21px;font-variant-numeric:tabular-nums}
 .kpi .l{font-size:11.5px;color:var(--text-dim);margin-top:3px;line-height:1.35}
 
 /* figures */
@@ -63,7 +64,7 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--hairline);fon
 .sky-tools .seg button[aria-pressed="true"]{background:var(--accent-bg);color:var(--text);border-color:var(--accent)}
 .sky-btns{margin-left:auto;display:inline-flex;gap:6px}
 .sky-btns button{border-radius:6px}
-.sky-coord{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;color:var(--text-dim);white-space:pre}
+.sky-coord{font-family:"Azeret Mono",ui-monospace,monospace;font-size:11px;color:var(--text-dim);white-space:pre}
 .sky-stage{position:relative}
 .sky canvas{width:100%;display:block;cursor:grab;touch-action:pan-y}
 .sky-tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;
@@ -124,16 +125,25 @@ table.cat tbody tr.click{cursor:pointer}
 .star h1{font-size:24px}
 .toprow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin:14px 0 16px}
 .panel{background:var(--panel);border:1px solid var(--panel-border);border-radius:10px;padding:16px 18px}
-.sec{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;letter-spacing:.09em;
+.sec{font-family:"Azeret Mono",ui-monospace,monospace;font-size:10px;letter-spacing:.09em;
   text-transform:uppercase;color:var(--text-faint);margin:14px 0 4px}
 .sec:first-child{margin-top:0}
 .stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;
   border-top:1px solid var(--hairline);gap:16px}
 .stat-row:first-of-type{border-top:none}
 .stat-label{font-size:12.5px;color:var(--text-dim)}
-.stat-value{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px;
+.stat-value{font-family:"Azeret Mono",ui-monospace,monospace;font-size:12.5px;
   font-variant-numeric:tabular-nums;text-align:right}
 .sub{opacity:.62;font-size:11px}
+table.sect{width:100%;border-collapse:collapse;margin:2px 0 8px;font-family:"Azeret Mono",ui-monospace,monospace;
+  font-size:12px;font-variant-numeric:tabular-nums}
+table.sect th{font-family:"Instrument Sans",system-ui,sans-serif;font-weight:500;font-size:10.5px;color:var(--text-faint);
+  text-align:right;padding:3px 6px 5px;border-bottom:1px solid var(--panel-border);white-space:nowrap}
+table.sect td{text-align:right;padding:3px 6px;border-top:1px solid var(--hairline);white-space:nowrap}
+table.sect th:first-child,table.sect td:first-child{text-align:left;padding-left:0}
+table.sect th:last-child,table.sect td:last-child{padding-right:0}
+table.sect td.none{color:var(--text-faint)}
+table.sect tr.quiet td{color:var(--text-dim)}
 .links{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;margin-top:10px}
 #aladin{width:100%;height:100%;min-height:330px;border-radius:7px;overflow:hidden;background:#000}
 .skypanel{display:flex;flex-direction:column;padding:10px}
@@ -141,7 +151,7 @@ table.cat tbody tr.click{cursor:pointer}
 .hint{margin:6px 0 0;font-size:11px;line-height:1.5;color:var(--text-faint)}
 .lchead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
-.tabs button{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;padding:4px 10px;
+.tabs button{font-family:"Azeret Mono",ui-monospace,monospace;font-size:11.5px;padding:4px 10px;
   border-radius:6px;background:var(--input-bg);border:1px solid var(--panel-border);color:var(--text-dim);cursor:pointer}
 .tabs button:hover{border-color:var(--accent);color:var(--text)}
 .tabs button[aria-pressed="true"]{background:var(--accent-bg);border-color:var(--accent-deep);color:var(--accent)}
@@ -158,7 +168,7 @@ table.cat tbody tr.click{cursor:pointer}
 .panel + .panel{margin-top:16px}
 
 /* uPlot on the dark surface */
-.uplot{font-family:"IBM Plex Mono",ui-monospace,monospace}
+.uplot{font-family:"Azeret Mono",ui-monospace,monospace}
 /* drag-to-zoom window. uPlot.min.css loads after this file, so the selector must out-rank its .uplot .u-select */
 .chart .uplot .u-select{background:rgba(244,234,235,0.13);box-shadow:inset 0 0 0 1px rgba(244,234,235,0.38)}  /* inset: nothing drawn at zero size */
 
@@ -178,5 +188,5 @@ table.cat tbody tr.click{cursor:pointer}
   .panel{padding:13px 13px}
 }
 .chart{position:relative;padding-bottom:15px}
-.chart .readout{position:absolute;right:10px;bottom:3px;font:11px "IBM Plex Mono",ui-monospace,monospace;color:var(--text-faint);pointer-events:none;white-space:nowrap}
+.chart .readout{position:absolute;right:10px;bottom:3px;font:11px "Azeret Mono",ui-monospace,monospace;color:var(--text-faint);pointer-events:none;white-space:nowrap}
 .nowrap{white-space:nowrap}

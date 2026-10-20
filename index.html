@@ -1,16 +1,19 @@
 <!doctype html><html lang="en"><meta charset="utf-8">
-<title>TESSELLATE flare star catalogue</title>
+<title>TESSELLATE Flare Star Catalogue</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Stellar flares found in TESS full-frame images by the TESSELLATE transient search, with every flare star's TESSELLATE light curve.">
-<link rel="stylesheet" href="assets/site.css?v=26">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css?v=28">
 <main>
   <p class="eyebrow" id="eyebrow">TESSELLATE &middot; TESS full-frame images</p>
-  <h1>Stellar flare catalogue</h1>
+  <h1>Stellar Flare Catalogue</h1>
   <p class="lede">Flares found by <strong>TESSELLATE</strong>, an untargeted search for transients across every TESS full-frame image, matched to their Gaia host stars. Every star has a page with its full TESSELLATE light curve, each flare's shape and classification, and where on the sky each flare came from.</p>
   <div class="caveat" id="pilot" hidden></div>
   <div class="kpi" id="kpi"></div>
 
-  <h2>Find a star</h2>
+  <h2>Find a Star</h2>
   <p class="note">Search by Gaia DR3 source ID, or by position as <span class="mono">RA Dec</span> in decimal degrees with an optional radius in arcminutes (e.g. <span class="mono">94.15 82.06 10</span>).</p>
   <div class="searchrow">
     <input id="q" type="search" placeholder="Gaia DR3 ID, or RA Dec [radius&prime;]" autocomplete="off" spellcheck="false">
@@ -31,18 +34,18 @@
   </tr></thead><tbody id="rows"></tbody></table></div>
   <p class="note" style="margin-top:12px"><a href="search.html"><strong>Browse the full catalogue &rarr;</strong></a> &mdash; every flare star, with filters and sorting.</p>
 
-  <h2>The population</h2>
+  <h2>The Population</h2>
   <div class="figs" id="figs">
     <figure id="skyfig"><img src="assets/fig_sky.png" alt="Sky positions of the flare stars"><figcaption id="cap_sky">Where the flare stars are on the sky.</figcaption></figure>
     <figure><img src="assets/fig_stack.png" alt="All simple flares stacked"><figcaption id="cap_stack">Simple flares stacked: time in units of each flare's decay half-time, flux relative to its peak frame, with the Davenport et al. (2014) template for comparison.</figcaption></figure>
-    <figure><img src="assets/fig_ed.png" alt="Distribution of flare equivalent durations"><figcaption id="cap_ed">Flare equivalent durations, simple and complex flares.</figcaption></figure>
+    <figure><img src="assets/fig_ed.png" alt="Distribution of flare energies"><figcaption id="cap_ed">Flare equivalent durations, simple and complex flares.</figcaption></figure>
     <figure><img src="assets/fig_cmd.png" alt="Colour-magnitude diagram coloured by flare rate"><figcaption id="cap_cmd">Gaia colour&ndash;magnitude diagram of the flare stars, coloured by flare rate.</figcaption></figure>
   </div>
 
-  <h2>What is on a star page</h2>
+  <h2>What Is on a Star Page</h2>
   <p class="note">The star's whole TESSELLATE light curve, sector by sector, at the full 10-minute cadence with the fitted baseline, and a close-up of every flare with its fitted decay and any extra peaks; a table of the star's flares; and an <a href="https://aladin.cds.unistra.fr/AladinLite/">Aladin Lite</a> sky view showing the star, its Gaia neighbours and the 68% localisation region of each flare.</p>
 
-  <h2>How the flares are found and measured</h2>
+  <h2>How the Flares Are Found and Measured</h2>
   <p class="note"><strong>Detection.</strong> TESSELLATE (<a href="https://ui.adsabs.harvard.edu/abs/2025AJ....170..186R/abstract">Roxburgh &amp; Ridden-Harper et al. 2025</a>) searches difference images built by TESSreduce (<a href="https://arxiv.org/abs/2111.15006">Ridden-Harper et al. 2021</a>) for every transient in the TESS full-frame images, without a target list. Events are classified by a machine-learning model; a <em>gold</em> flare has a flare probability of at least 0.9 and a single Gaia star inside its 3&sigma; localisation region, and the flare stars here are the hosts of gold flares.</p>
   <p class="note"><strong>Localisation.</strong> Each flare's position comes from a PSF fit to the difference image. The circles on the star pages are each flare's 3&sigma; region (three times the fitted 1&sigma; per-axis error, on TESS's 21&Prime; pixels) &mdash; the region used to match flares to Gaia stars, so a gold flare has exactly one Gaia star inside its circle.</p>
   <p class="note"><strong>Light curves.</strong> Photometry is a forced PSF fit at the Gaia position. The baseline is one least-squares fit per orbit: a smooth spline for slow trends plus, where the star rotates and the data ask for it, a rotation signal whose shape may evolve slowly; flares are excluded by iterative one-sided clipping. Noise is the local robust scatter within &plusmn;1 day, with a correction for correlated noise.</p>
@@ -53,7 +56,7 @@
 </main>
 <script src="assets/common.js?v=26"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="assets/sky.js?v=26"></script>
+<script src="assets/sky.js?v=29"></script>
 <script>
 const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
 let DATA = [], sortKey = 'n', sortDir = -1;
@@ -95,7 +98,9 @@ TF.summary().then(s => {
               [`${(100 * k.frac_complex).toFixed(0)}%`, 'of flares complex' + (k.frac_marginal != null ? `, ${(100 * k.frac_marginal).toFixed(0)}% marginal` : '') + ' (S/N dependent)'],
               k.comps_sig != null ? [k.comps_sig.toLocaleString(), `significant extra components (+ ${k.comps_marg.toLocaleString()} marginal)`]
                                   : [k.extra_peaks.toLocaleString(), 'extra peaks found, ' + k.extra_new.toLocaleString() + ' not in the detection catalogue'],
-              [`${k.median_days.toFixed(0)} days`, 'median TESS coverage per star']];
+              [`${k.median_days.toFixed(0)} days`, 'median TESS coverage per star']]
+    .concat(k.n_energy ? [[k.n_energy.toLocaleString(), 'flares with a TESS-band energy (Gaia distance)']] : [])
+    .concat(k.median_dist ? [[`${k.median_dist.toFixed(0)} pc`, 'median distance (Gaia parallax)']] : []);
   document.getElementById('kpi').innerHTML = kp.map(([v, l]) => `<div><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
   document.getElementById('eyebrow').innerHTML = `TESSELLATE &middot; TESS sector${s.sectors.length > 1 ? 's' : ''} ${s.sectors.join(', ')}`;
   if (s.pilot) { const p = document.getElementById('pilot'); p.innerHTML = s.pilot; p.hidden = false; }

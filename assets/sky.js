@@ -44,6 +44,22 @@ const TFSky = (() => {
     return {type: 'LineString', coordinates: pts};
   }
 
+  // named sky features, drawn with labels: r = an outline of that radius (deg), else a small cross. dx, dy: the label's
+  // offset (px) from the point; align: which side of the text sits at that offset
+  // offset (px) from the point (outlines: from the circle's edge); s = the short name used while zoomed out. Listed in
+  // priority order: a label that would overlap one already drawn is left out.
+  const FEATURES = [
+    {n: 'Large Magellanic Cloud', s: 'LMC', ra: 80.894, dec: -69.756, r: 5.0, dx: -1, dy: 1},
+    {n: 'Small Magellanic Cloud', s: 'SMC', ra: 13.187, dec: -72.829, r: 2.5, dx: 1, dy: 1},
+    {n: 'Galactic centre', s: 'GC', ra: 266.405, dec: -29.008, dx: 1, dy: -1},
+    {n: 'S. ecliptic pole (TESS CVZ)', s: 'SEP', ra: 90.0, dec: -66.561, dx: -1, dy: -1},
+    {n: 'N. ecliptic pole (TESS CVZ)', s: 'NEP', ra: 270.0, dec: 66.561, dx: 1, dy: -1},
+    {n: 'S. Galactic pole', s: 'SGP', ra: 12.857, dec: -27.128, dx: 1, dy: -1},
+    {n: 'N. Galactic pole', s: 'NGP', ra: 192.859, dec: 27.128, dx: 1, dy: -1},
+  ];
+  const FULL_NAMES_K = 2.5;                         // zoom from which the full names are written
+  const PLANE_LABEL = {ra: 300.4, dec: 32.6};       // 'Galactic plane' written beside the line here (l = 70 deg, Cygnus)
+
   // equal-area-ish cells: dec bands of CELL, each split into ~360 cos(dec) / CELL RA cells; each cell is a sky polygon
   // (d3 clips it at the map edge / horizon)
   function densityCells(stars) {
@@ -193,7 +209,7 @@ const TFSky = (() => {
       const c = onMap(W / 2, H / 2) || [0, 0];
       const latRow = Math.max(-90 + step, Math.min(90 - step, Math.round(c[1] / step) * step));
       const lonCol = Math.round(c[0] / step) * step;
-      ctx.font = `10px "IBM Plex Mono", ui-monospace, monospace`; ctx.fillStyle = C('--text-dim');
+      ctx.font = `10px "Azeret Mono", ui-monospace, monospace`; ctx.fillStyle = C('--text-dim');
       ctx.textBaseline = 'bottom'; ctx.textAlign = 'left'; ctx.lineJoin = 'round';
       ctx.strokeStyle = 'rgba(16,5,8,0.9)'; ctx.lineWidth = 3;
       const put = (txt, p) => { ctx.strokeText(txt, p[0] + 3, p[1] - 2); ctx.fillText(txt, p[0] + 3, p[1] - 2); };
@@ -212,6 +228,55 @@ const TFSky = (() => {
         if (lat === latRow || mod(Math.round(lat / step), every)) continue;
         const p = vis([lonCol, lat]); if (p) put(fmtDec(lat), p);
       }
+    }
+
+    function features() {                 // the Magellanic Clouds, poles, Galactic centre; after the stars, before the grid labels
+      const mid = proj.invert([W / 2, H / 2]);
+      const at = (ra, dec) => {             // screen point, if on the map and (globe) on the near side
+        const ll = [-ra, dec];
+        if (mode === 'globe' && d3.geoDistance(ll, mid) > Math.PI / 2 - 0.02) return null;
+        const p = proj(ll);
+        return p && p[0] > -40 && p[0] < W + 40 && p[1] > -20 && p[1] < H + 20 && onMap(p[0], p[1]) ? p : null;
+      };
+      ctx.save();
+      ctx.strokeStyle = 'rgba(244,234,235,0.55)'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+      for (const f of FEATURES) if (f.r && at(f.ra, f.dec)) {
+        ctx.beginPath(); path(d3.geoCircle().center([-f.ra, f.dec]).radius(f.r)()); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      for (const f of FEATURES) {           // small crosses for the points
+        const p = at(f.ra, f.dec); if (!p || f.r) continue;
+        for (const lw of [3.5, 1.3]) {
+          ctx.lineWidth = lw; ctx.strokeStyle = lw > 2 ? 'rgba(16,5,8,0.92)' : '#f4eaeb';
+          ctx.beginPath(); ctx.moveTo(p[0] - 4, p[1]); ctx.lineTo(p[0] + 4, p[1]); ctx.moveTo(p[0], p[1] - 4); ctx.lineTo(p[0], p[1] + 4); ctx.stroke();
+        }
+      }
+      ctx.font = 'italic 11px "Instrument Sans", system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      const boxes = [];
+      // write txt beside (x, y), on side sx (+1 right, -1 left) and sy (+1 below, -1 above), flipped to stay on the
+      // canvas; skipped if it would overlap a label already written
+      const write = (txt, x, y, sx, sy, gap, col) => {
+        const w = ctx.measureText(txt).width, h = 12;
+        if (sx > 0 && x + gap + w > W - 4) sx = -1;
+        if (sx < 0 && x - gap - w < 4) sx = 1;
+        if (sy < 0 && y - gap - h < 2) sy = 1;
+        if (sy > 0 && y + gap + h > H - 2) sy = -1;
+        const x0 = sx > 0 ? x + gap : x - gap - w, yc = y + sy * (gap * 0.6 + h / 2);
+        const box = [x0 - 2, yc - h / 2 - 1, x0 + w + 2, yc + h / 2 + 1];
+        if (boxes.some(q => box[0] < q[2] && box[2] > q[0] && box[1] < q[3] && box[3] > q[1])) return;
+        boxes.push(box);
+        ctx.textAlign = 'left'; ctx.strokeStyle = 'rgba(16,5,8,0.92)'; ctx.lineWidth = 3.5;
+        ctx.strokeText(txt, x0, yc); ctx.fillStyle = col; ctx.fillText(txt, x0, yc);
+      };
+      const full = K >= FULL_NAMES_K;
+      for (const f of FEATURES) {
+        const p = at(f.ra, f.dec); if (!p) continue;
+        const r = f.r ? f.r * RAD * proj.scale() : 0;
+        write(full ? f.n : f.s, p[0], p[1], f.dx, f.dy, f.r ? r * 0.75 + 2 : 5, '#f4eaeb');
+      }
+      const q = at(PLANE_LABEL.ra, PLANE_LABEL.dec);
+      if (q) write('Galactic plane', q[0], q[1], 1, -1, 5, C('--c-base'));
+      ctx.restore();
     }
 
     function draw() {
@@ -258,6 +323,7 @@ const TFSky = (() => {
         const h = hover != null && shown.find(q => q[3] === hover);
         if (h) { ctx.beginPath(); ctx.arc(h[0], h[1], h[2] + 2.5, 0, 2 * Math.PI); ctx.strokeStyle = C('--text'); ctx.lineWidth = 2; ctx.stroke(); }
       }
+      features();
       labels();
       legend(mix);
     }
@@ -372,6 +438,7 @@ const TFSky = (() => {
     makeProj();
     new ResizeObserver(() => size()).observe(stage);
     size();
+    if (document.fonts) document.fonts.ready.then(() => size());   // labels use the web fonts
     return true;
   }
   return {init};

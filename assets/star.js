@@ -10,7 +10,7 @@
 
   function fail(msg) {
     $('main').innerHTML = `<a class="home" href="index.html">&larr; Catalogue</a>
-      <p class="eyebrow">TESSELLATE flare star</p><h1>Not found</h1>
+      <p class="eyebrow">TESSELLATE flare star</p><h1>Not Found</h1>
       <div class="empty">${msg}<br><br><a href="search.html">Browse the flare stars &rarr;</a></div>`;
   }
   if (!id) return fail('No star was given (the address should end in <span class="mono">star.html?id=&lt;Gaia DR3 ID&gt;</span>).');
@@ -26,6 +26,12 @@
   }
   const EV = S.events;
   const PERIODIC = S.sectors.some(s => s.p);       // baseline has a periodic (rotation) part to subtract separately
+  // flux units: mJy (TESS band, each sector's own zero point) when every sector is calibrated, else e-/s -- never mixed
+  const MJY = S.sectors.length > 0 && S.sectors.every(s => s.mjy != null);
+  const UNIT = MJY ? 'mJy' : 'e⁻/s', UNIT_H = MJY ? 'mJy' : 'e&#8315;/s';
+  const KU = new Map(S.sectors.map(s => [s.s, MJY ? s.mjy : 1]));      // display units per e-/s, by sector
+  const fU = v => MJY ? (Math.abs(v) >= 10 ? v.toFixed(1) : Math.abs(v) >= 1 ? v.toFixed(2) : v.toFixed(3)) : v.toFixed(1);
+  const sci = v => { if (v == null) return '&mdash;'; const e = Math.floor(Math.log10(v)); return `${(v / 10 ** e).toFixed(2)}&times;10<sup>${e}</sup>`; };
   // each flare's window (peak - 6 h .. max(end, peak) + 12 h), cut from its sector's full-cadence light curve:
   // r = flux - baseline and e = noise sigma, in 0.1 e-/s, null where a frame is missing
   for (const ev of EV) {
@@ -40,7 +46,7 @@
     ev.w = {t: sc.t + lo * sc.dt, dt: sc.dt, r, e};
   }
   const MULTI = S.sectors.length > 1;
-  document.title = `Gaia DR3 ${S.id} — TESSELLATE flare catalogue`;
+  document.title = `Gaia DR3 ${S.id} — TESSELLATE Flare Catalogue`;
   $('name').innerHTML = `Gaia DR3 <span class="mono">${S.id}</span>`;
   const sgn = v => (v >= 0 ? '+' : '&minus;') + Math.abs(v).toFixed(5);
   $('subtitle').innerHTML = `RA ${S.ra.toFixed(5)}&deg;, Dec ${sgn(S.dec)}&deg; &middot; ` +
@@ -57,6 +63,7 @@
   const nComplex = EV.filter(e => e.cls === 'complex').length;
   const nExtra = EV.reduce((a, e) => a + (e.n_comp || 0), 0);
   const eds = EV.map(e => e.ed).filter(v => v != null);
+  const ens = EV.map(e => e.en).filter(v => v != null);
   let rot = '&mdash;';
   if (S.prot != null) rot = `${S.prot.toFixed(3)} d <span class="sub">(LS power ${fmt(S.prot_power, 2)})</span>`;
   else if (S.prot_cand != null) rot = `none significant <span class="sub">(best ${S.prot_cand.toFixed(2)} d, power ${fmt(S.prot_power, 2)})</span>`;
@@ -67,16 +74,32 @@
     stat('Neighbour contamination', S.contam == null ? '&mdash;' :
          `${fmt(S.contam, 2)} <span class="sub">(neighbours / star, 3&times;3 px)</span>`) +
     stat('Variable-star catalogue', S.var_type && S.var_type !== '-' ? TF.esc(S.var_type) : 'none') +
+    stat('Distance', S.dist == null ? '&mdash;' :
+         `${fmt(S.dist, 1)} pc <span class="sub">(parallax ${fmt(S.plx, 3)} &plusmn; ${fmt(S.plx_e, 3)} mas)</span>`) +
+    stat('Absolute <em>G</em>', fmt(S.absG, 2)) +
+    stat('T<sub>eff</sub> <span class="sub">(GSP-Phot)</span>', S.teff == null ? '&mdash;' : `${fmt(S.teff, 0)} K`) +
+    stat('Tangential velocity', S.vtan == null ? '&mdash;' : `${fmt(S.vtan, 1)} km/s`) +
+    stat('RUWE', fmt(S.ruwe, 2) + (S.ruwe != null && S.ruwe > 1.4 ? ' <span class="sub">(&gt; 1.4: possible binary)</span>' : '')) +
     `<p class="sec">TESSELLATE</p>` +
-    stat('Sectors <span class="sub">(camera/CCD, cut, objid)</span>', S.sectors.map(s => s.cam == null ? `${s.s}` :
-      `${s.s} <span class="sub">(${s.cam}/${s.ccd}, cut ${s.cut}${s.obj && s.obj.length ? `, obj ${s.obj.join('/')}` : ''})</span>`).join('<br>')) +
+    // one row per sector: where the star sits, its TESSELLATE objects there, its flares, its quiescent flux density
+    `<table class="sect"><thead><tr><th>Sector</th><th>Camera</th><th>CCD</th><th>Cut</th><th>Object</th><th>Flares</th>` +
+    `<th title="quiescent flux density, TESS band">F<sub>q</sub> (${UNIT_H})</th></tr></thead><tbody>` +
+    S.sectors.map(s => {
+      const n = EV.filter(e => e.s === s.s).length, dash = '<td class="none">&ndash;</td>';
+      return `<tr${n ? '' : ' class="quiet"'}><td>${s.s}</td>` +
+        (s.cam == null ? dash + dash + dash : `<td>${s.cam}</td><td>${s.ccd}</td><td>${s.cut}</td>`) +
+        (s.obj && s.obj.length ? `<td>${s.obj.join(', ')}</td>` : dash) + `<td>${n}</td>` +
+        (s.fq == null ? dash : `<td>${sig3(s.fq * KU.get(s.s))}</td>`) + '</tr>';
+    }).join('') + '</tbody></table>' +
     stat('Observing time', `${fmt(S.obs_days, 1)} d`) +
     stat('Flares', `${EV.length} <span class="sub">(${EV.filter(e => e.tier === 'gold').length} gold)</span>`) +
     stat('Flare rate', `${fmt(S.rate, 3)} per day`) +
     stat('Complex flares', `${nComplex}` + (nExtra ? ` <span class="sub">(${nExtra} significant component${nExtra > 1 ? 's' : ''})</span>` : '')) +
-    stat('Largest flare (ED)', eds.length ? `${sig3(Math.max(...eds))} s` : '&mdash;') +
+    stat('Largest flare', ens.length ? `${sci(Math.max(...ens))} erg <span class="sub">(ED ${sig3(Math.max(...eds))} s)</span>`
+                                      : eds.length ? `ED ${sig3(Math.max(...eds))} s` : '&mdash;') +
     stat('Rotation period', rot) +
-    stat('Quiescent flux', S.sectors.map(s => s.fq == null ? `${s.s}: &mdash;` : `${s.s}: ${sig3(s.fq)}`).join(', ') + ' <span class="sub">e&#8315;/s</span>') +
+    stat('Quiescent magnitude <span class="sub">(TESS band, AB)</span>', fmt(S.mag_t, 2)) +
+    stat('Quiescent luminosity <span class="sub">(TESS band)</span>', S.Lq == null ? '&mdash;' : `${sci(S.Lq)} erg/s`) +
     `<div class="links"><a href="https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${S.ra}+${S.dec}&amp;Radius=10&amp;Radius.unit=arcsec" target="_blank" rel="noopener">SIMBAD</a>` +
     `<a href="https://vizier.cds.unistra.fr/viz-bin/VizieR-4?-source=I/355/gaiadr3&amp;Source=${S.id}" target="_blank" rel="noopener">Gaia DR3 (VizieR)</a></div>`;
 
@@ -157,9 +180,27 @@
 
   // ---------------- chart helpers ----------------
   // whole-pixel font sizes only: uPlot rescales the integer before 'px' for high-DPI canvases
-  const FONT = '11px "IBM Plex Mono", ui-monospace, monospace', LFONT = '12px "IBM Plex Sans", system-ui, sans-serif';
+  const FONT = '11px "Azeret Mono", ui-monospace, monospace', LFONT = '12px "Instrument Sans", system-ui, sans-serif';
   const axis = (label, size) => ({label, labelSize: 20, labelFont: LFONT, font: FONT, size, stroke: C('--text-dim'),
     grid: {stroke: C('--hairline'), width: 1}, ticks: {stroke: C('--panel-border'), width: 1}});
+  // right-hand axis in TESS count rate (e-/s) for a plot drawn in mJy: k = mJy per e-/s; ticks at round e-/s values.
+  // approx: the plot spans sectors whose zero points differ, so k is their median
+  function countsAxis(k, approx) {
+    const nice = x => { const p = 10 ** Math.floor(Math.log10(x)), m = x / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; };
+    let step = 1;
+    return Object.assign(axis(`${approx ? '≈ ' : ''}TESS count rate (e⁻/s)`, 64), {
+      side: 1, scale: 'y', grid: {show: false},
+      splits: (u, ai, lo, hi) => {
+        if (!(hi > lo)) return [];
+        step = nice((hi - lo) / k / 5);
+        const out = [];
+        for (let e = Math.ceil(lo / k / step) * step; e <= hi / k + 1e-9; e += step) out.push(e * k);
+        return out;
+      },
+      values: (u, splits) => splits.map(v => { const e = v / k, d = Math.max(0, -Math.floor(Math.log10(step)));
+                                             return (Math.abs(e) < step / 1e6 ? 0 : e).toFixed(d); }),
+    });
+  }
   const clip = u => { const b = u.bbox; u.ctx.beginPath(); u.ctx.rect(b.left, b.top, b.width, b.height); u.ctx.clip(); };
   // time-only zoom: no horizontal cursor line, drag selects a time range and the flux axis rescales itself
   // only the data series si gets a cursor dot: the readout reports that point
@@ -226,8 +267,8 @@
         let fv = null, bv = null;
         if (b != null && p != null) {
           const off = (sub.spline ? b - p : 0) + (sub.periodic ? p : 0);       // what is subtracted
-          bv = (b - off) / 10;
-          if (f != null) fv = (f - off) / 10;
+          bv = (b - off) / 10 * KU.get(s.s);
+          if (f != null) fv = (f - off) / 10 * KU.get(s.s);
         }
         X.push(g.p0 + (s.t + i * s.dt - g.t0)); Bs.push(bv); F.push(fv); R.push(fl[i] ? fv : null);
       }
@@ -282,7 +323,7 @@
       }
     }
     if (V.segs.length > 1) {
-      ctx.fillStyle = C('--text-faint'); ctx.font = `${Math.round(10 * dpr)}px "IBM Plex Mono", ui-monospace, monospace`;
+      ctx.fillStyle = C('--text-faint'); ctx.font = `${Math.round(10 * dpr)}px "Azeret Mono", ui-monospace, monospace`;
       ctx.textBaseline = 'top';
       for (const g of V.segs) {
         const x = u.valToPos(g.p0, 'x', true);
@@ -303,14 +344,20 @@
     OV = new uPlot({
       width: el.clientWidth, height: 300,
       scales: {x: {time: false}},
-      axes: [timeAxis(V), axis(`${ylab} (e⁻/s)`, 64)],
+      axes: [timeAxis(V), axis(`${ylab} (${UNIT})`, 64)].concat(MJY ? (() => {
+        const ks = [...new Set(V.segs.map(g => KU.get(g.sec.s)))].sort((a, b) => a - b);
+        const k = ks[Math.floor(ks.length / 2)];
+        return [countsAxis(k, ks.length > 1 && ks[ks.length - 1] / ks[0] > 1.001)];
+      })() : []),
       series: [{},
                {stroke: C('--c-base'), width: 1.8, points: {show: false}, show: $('showbase').checked},   // baseline (zero when subtracted)
                {stroke: 'rgba(234,223,224,0.55)', width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
                {stroke: C('--c-flare'), width: 1.8, points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],   // flares
       cursor: CURSOR(2), legend: {show: false},
       hooks: {drawClear: [u => shadeFlares(u, V, evs)], draw: [u => drawGaps(u, V)],
-              setCursor: [readout(el, 2, (x, f) => `t = ${toReal(V, x).t.toFixed(4)}, f = ${f.toFixed(1)} e⁻/s`)]},
+              setCursor: [readout(el, 2, (x, f) => { const re = toReal(V, x);        // counts: this point's own sector
+                const c = MJY ? ` (${(f / KU.get(re.seg.s)).toFixed(1)} e⁻/s)` : '';
+                return `t = ${re.t.toFixed(4)}, f = ${fU(f)} ${UNIT}${c}`; })]},
     }, viewData(V, sub, evs), el);
     if (old) OV.setScale('x', {min: old[0], max: old[1]});
     let down = null;
@@ -422,21 +469,25 @@
                   ...cmod.sig.map(sig => sig ? {stroke: '#f3c35a', width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}}    // significant
                                              : {stroke: 'rgba(243,195,90,0.6)', width: 1.4, dash: [2, 4], spanGaps: false, points: {show: false}}));  // marginal
     } else data = [xs, ys, yf];
+    const KD = subFit ? 1 : KU.get(ev.s);               // display units (sigma units are left alone)
+    if (KD !== 1) data = data.map((a, i) => i === 0 ? a : a.map(v => v == null ? v : v * KD));
     const showFeat = false;                             // (the old rule-based feature shading is retired)
     const cadh = w.dt * 24;
     FC = new uPlot({
       width: el.clientWidth, height: 300,
       scales: {x: {time: false}},
-      axes: [axis('hours from the peak frame', 40), axis(subFit ? 'residual from the model (σ)' : 'flux − baseline (e⁻/s)', 64)],
+      axes: [axis('hours from the peak frame', 40), axis(subFit ? 'residual from the model (σ)' : `flux − baseline (${UNIT})`, 64)]
+        .concat(MJY && !subFit ? [countsAxis(KU.get(ev.s), false)] : []),
       series, cursor: CURSOR(1), legend: {show: false},
       hooks: {
         setCursor: [readout(el, 1, (x, f) => `t = ${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)} h, f = ` +
-                                          (subFit ? `${f.toFixed(1)}σ` : `${f.toFixed(1)} e⁻/s`))],
+                                          (subFit ? `${f.toFixed(1)}σ` : `${fU(f)} ${UNIT}` +
+                                           (MJY ? ` (${(f / KD).toFixed(1)} e⁻/s)` : '')))],
         drawClear: [u => {
           const ctx = u.ctx, top = u.bbox.top, h = u.bbox.height;
           ctx.save(); clip(u);
           const dpr = devicePixelRatio || 1;
-          ctx.font = `${Math.round(11 * dpr)}px "IBM Plex Sans", system-ui, sans-serif`;
+          ctx.font = `${Math.round(11 * dpr)}px "Instrument Sans", system-ui, sans-serif`;
           ctx.textAlign = 'center'; ctx.textBaseline = 'top';
           let labelEnd = -Infinity, row = 0;                              // a label that would touch the previous one drops a line
           for (const sp of showFeat ? [mainSpan].concat(ev.spans).sort((p, q) => p.x0 - q.x0) : []) {
@@ -464,7 +515,7 @@
           const X = u.data[0], Y = u.data[1], x0 = u.scales.x.min, x1 = u.scales.x.max;
           for (let i = 0; i < X.length; i++) {
             if (Y[i] == null || !err.has(X[i]) || X[i] < x0 || X[i] > x1) continue;
-            const x = u.valToPos(X[i], 'x', true), e = err.get(X[i]);
+            const x = u.valToPos(X[i], 'x', true), e = err.get(X[i]) * KD;
             ctx.beginPath(); ctx.moveTo(x, u.valToPos(Y[i] - e, 'y', true)); ctx.lineTo(x, u.valToPos(Y[i] + e, 'y', true)); ctx.stroke();
           }
           ctx.restore();
@@ -503,8 +554,10 @@
       stat('Tier', ev.tier) +
       stat('p<sub>Flare</sub> <span class="sub">(ML classifier)</span>', ev.loc.length ? ev.loc.map(L => fmt(L.p, 3)).join(', ') : '&mdash;') +
       stat('Peak S/N', fmt(ev.snr, 1)) +
+      stat('Peak excess', ev.pkm != null && MJY ? `${sig3(ev.pkm)} mJy` : ev.pk != null ? `${sig3(ev.pk)} e&#8315;/s` : '&mdash;') +
       stat('Amplitude &Delta;F/F', ev.amp == null ? '&mdash;' : sig3(ev.amp)) +
       stat('Equivalent duration', ev.ed == null ? '&mdash;' : `${sig3(ev.ed)} s`) +
+      stat('Energy <span class="sub">(TESS band)</span>', ev.en == null ? '&mdash;' : `${sci(ev.en)} erg`) +
       stat('Decay half-time t<sub>&frac12;</sub>', ev.cm && ev.cm.th != null ? `${fmt(ev.cm.th, 1)} min` : '&mdash;') +
       stat('Decay model', !ev.cm ? '&mdash;' : ev.cm.kind === 'PL' ? `power law, &alpha; = ${fmt(ev.cm.p[4], 2)}` +
         (ev.cm.p[4] > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') :
@@ -522,7 +575,8 @@
   // ---------------- flare table ----------------
   const COLS = [['#', e => e.k + 1], ['Peak (MJD)', e => e.tpk.toFixed(3)], ['Sector', e => e.s], ['Class', e => TF.tag(e.cls)],
     ['Comp.', e => `${e.n_comp || 0}` + (e.n_marg ? ` <span class="sub">(+${e.n_marg})</span>` : '')], ['S/N', e => fmt(e.snr, 0)], ['&Delta;F/F', e => e.amp == null ? '&mdash;' : sig3(e.amp)],
-    ['ED (s)', e => e.ed == null ? '&mdash;' : sig3(e.ed)], ['t<sub>&frac12;</sub> (min)', e => fmt(e.thalf, 1)],
+    ['ED (s)', e => e.ed == null ? '&mdash;' : sig3(e.ed)], ['Energy (erg)', e => sci(e.en)],
+    ['t<sub>&frac12;</sub> (min)', e => fmt(e.thalf, 1)],
     ['Rise (min)', e => fmt(e.rise, 0)], ['p<sub>Flare</sub>', e => fmt(pFlare(e), 2)], ['Tier', e => e.tier]];
   function renderTable() {
     $('ftable').innerHTML = `<thead><tr>${COLS.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>` +
@@ -581,9 +635,11 @@
   };
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(fit); ro.observe($('overview')); ro.observe($('flarechart')); }
   window.addEventListener('resize', fit);
+  // canvas text uses the web fonts: redraw once they have loaded
+  if (document.fonts) document.fonts.ready.then(() => { if (OV) OV.redraw(); if (FC) FC.redraw(); });
 
-  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_components,n_marginal,snr,amplitude,ed_s,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
-    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_comp || 0, e.n_marg || 0, e.snr, e.amp ?? '', e.ed ?? '',
+  const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_components,n_marginal,snr,peak_excess_mjy,amplitude,ed_s,energy_erg,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
+    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_comp || 0, e.n_marg || 0, e.snr, e.pkm ?? '', e.amp ?? '', e.ed ?? '', e.en ?? '',
       e.thalf ?? '', e.fit ? e.fit.alpha : '', e.rise, '"' + e.loc.map(L => L.name).join('; ') + '"',
       ...['cam', 'ccd', 'cut', 'obj', 'eid'].map(c => '"' + e.loc.map(L => L[c] ?? '').join('; ') + '"')].join(','))).join('\n');
   const blob = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
