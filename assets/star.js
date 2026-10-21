@@ -59,6 +59,7 @@
   const visible = () => EV.filter(e => showSecondary() || e.tier === 'gold');
 
   // ---------------- info panel ----------------
+  const FC_H = 320;            // flare chart height: with the detection rows under it, level with the stats beside it
   const stat = (l, v) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`;
   const nComplex = EV.filter(e => e.cls === 'complex').length;
   const nExtra = EV.reduce((a, e) => a + (e.n_comp || 0), 0);
@@ -67,6 +68,10 @@
   let rot = '&mdash;';
   if (S.prot != null) rot = `${S.prot.toFixed(3)} d <span class="sub">(LS power ${fmt(S.prot_power, 2)})</span>`;
   else if (S.prot_cand != null) rot = `none significant <span class="sub">(best ${S.prot_cand.toFixed(2)} d, power ${fmt(S.prot_power, 2)})</span>`;
+  // no rotation period from the periodogram, but the baseline fit chose a periodic term of its own
+  const PFIT = S.prot == null && S.baseline && S.baseline.periodic && S.baseline.P_fit != null ? S.baseline.P_fit : null;
+  if (PFIT != null) rot = (S.prot_cand != null ? rot : 'none significant') +
+    ` <span class="sub">(baseline fit uses ${PFIT.toFixed(3)} d)</span>`;
   $('info').innerHTML =
     `<p class="sec">Star (Gaia DR3)</p>` +
     stat('<em>G</em>', fmt(S.G, 2)) +
@@ -94,7 +99,7 @@
     stat('Observing time', `${fmt(S.obs_days, 1)} d`) +
     stat('Flares', `${EV.length} <span class="sub">(${EV.filter(e => e.tier === 'gold').length} gold)</span>`) +
     stat('Flare rate', `${fmt(S.rate, 3)} per day`) +
-    stat('Complex flares', `${nComplex}` + (nExtra ? ` <span class="sub">(${nExtra} significant component${nExtra > 1 ? 's' : ''})</span>` : '')) +
+    stat('Complex flares', `${nComplex}` + (nExtra ? ` <span class="sub">(${nExtra} significant extra component${nExtra > 1 ? 's' : ''})</span>` : '')) +
     stat('Largest flare', ens.length ? `${sci(Math.max(...ens))} erg <span class="sub">(ED ${sig3(Math.max(...eds))} s)</span>`
                                       : eds.length ? `ED ${sig3(Math.max(...eds))} s` : '&mdash;') +
     stat('Rotation period', rot) +
@@ -499,7 +504,7 @@
     const showFeat = false;                             // (the old rule-based feature shading is retired)
     const cadh = w.dt * 24;
     FC = new uPlot({
-      width: el.clientWidth, height: 300,
+      width: el.clientWidth, height: FC_H,
       scales: {x: {time: false}},
       axes: [axis('hours from the peak frame', 40), axis(subFit ? 'residual from the model (σ)' : `flux − baseline (${UNIT})`, 64)]
         .concat(MJY && !subFit ? [countsAxis(KU.get(ev.s), false)] : []),
@@ -588,18 +593,23 @@
         (ev.cm.p[4] > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') :
         `double exponential <span class="sub">(${fmt(ev.cm.p[3] * 60, 0)} and ${fmt(ev.cm.p[4] * 60, 0)} min, slow part ${fmt(100 * ev.cm.p[5], 0)}%)</span>`) +
       stat('Rise (peak &minus; t<sub>0</sub>)', `${fmt(ev.rise, 0)} min`) +
-      stat('Components', ev.cm && (ev.n_comp || ev.n_marg) ? ev.cm.comps.filter(c => c.kept).map(c =>
+      // components count the main flare too (Hugh): a simple flare has 1
+      stat('Components', ev.cm && (ev.n_comp || ev.n_marg) ? `${1 + (ev.n_comp || 0)}` +
+        (ev.n_marg ? ` <span class="sub">(+${ev.n_marg} marginal)</span>` : '') + '<br>' +
+        `<span class="nowrap">main flare</span><br>` + ev.cm.comps.filter(c => c.kept).map(c =>
         `<span class="nowrap">${c.d >= 0 ? '+' : '&minus;'}${fmt(Math.abs(c.d), 2)} h${c.sig ? '' : ' (marginal)'}</span> <span class="sub">(${fmt(100 * c.a, 0)}% of peak, ` +
-        `${fmt(100 * c.f, 0)}% of flux, FWHM ${fmt(c.fwhm * 60, 0)} min, &Delta;&chi;&sup2; ${fmt(c.dchi2, 0)})</span>`).join('<br>') : 'none') +
-      stat('Detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
-        `<span class="nowrap">S${ev.s} ${L.cam}/${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}</span>`).join('<br>') : '&mdash;') +
-      stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
+        `${fmt(100 * c.f, 0)}% of flux, FWHM ${fmt(c.fwhm * 60, 0)} min, &Delta;&chi;&sup2; ${fmt(c.dchi2, 0)})</span>`).join('<br>') : `1 <span class="sub">(main flare only)</span>`);
+    // where the flare came from: under the chart, so the two columns end level
+    $('fprov').innerHTML =
+      `<div class="wide">` + stat('Detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
+        `<span class="nowrap">S${ev.s} &middot; cam ${L.cam} &middot; ccd ${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}</span>`).join('<br>') : '&mdash;') +
+      `</div>` + stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
       stat('Catalogue entr' + (ev.loc.length > 1 ? 'ies' : 'y'), ev.loc.map(L => `<span class="sub">${TF.esc(L.name)}</span>`).join('<br>') || '&mdash;');
   }
 
   // ---------------- flare table ----------------
   const COLS = [['#', e => e.k + 1], ['Peak (MJD)', e => e.tpk.toFixed(3)], ['Sector', e => e.s], ['Class', e => TF.tag(e.cls)],
-    ['Comp.', e => `${e.n_comp || 0}` + (e.n_marg ? ` <span class="sub">(+${e.n_marg})</span>` : '')], ['S/N', e => fmt(e.snr, 0)], ['&Delta;F/F', e => e.amp == null ? '&mdash;' : sig3(e.amp)],
+    ['Comp.', e => `${1 + (e.n_comp || 0)}` + (e.n_marg ? ` <span class="sub">(+${e.n_marg})</span>` : '')], ['S/N', e => fmt(e.snr, 0)], ['&Delta;F/F', e => e.amp == null ? '&mdash;' : sig3(e.amp)],
     ['ED (s)', e => e.ed == null ? '&mdash;' : sig3(e.ed)], ['Energy (erg)', e => sci(e.en)],
     ['t<sub>&frac12;</sub> (min)', e => fmt(e.thalf, 1)],
     ['Rise (min)', e => fmt(e.rise, 0)], ['p<sub>Flare</sub>', e => fmt(pFlare(e), 2)], ['Tier', e => e.tier]];
@@ -656,7 +666,7 @@
   // charts follow their containers (window resizes, the browser pane, the mobile layout switch)
   const fit = () => {
     if (OV && Math.abs(OV.width - $('overview').clientWidth) > 1) OV.setSize({width: $('overview').clientWidth, height: 300});
-    if (FC && Math.abs(FC.width - $('flarechart').clientWidth) > 1) FC.setSize({width: $('flarechart').clientWidth, height: 300});
+    if (FC && Math.abs(FC.width - $('flarechart').clientWidth) > 1) FC.setSize({width: $('flarechart').clientWidth, height: FC_H});
   };
   if ('ResizeObserver' in window) { const ro = new ResizeObserver(fit); ro.observe($('overview')); ro.observe($('flarechart')); }
   window.addEventListener('resize', fit);
@@ -664,7 +674,7 @@
   if (document.fonts) document.fonts.ready.then(() => { if (OV) OV.redraw(); if (FC) FC.redraw(); });
 
   const csv = ['flare,sector,peak_mjd,start_mjd,t0_mjd,end_mjd,class,tier,p_flare,n_components,n_marginal,snr,peak_excess_mjy,amplitude,ed_s,energy_erg,t_half_min,alpha,rise_min,catalogue_names,camera,ccd,cut,objid,eventid']
-    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', e.n_comp || 0, e.n_marg || 0, e.snr, e.pkm ?? '', e.amp ?? '', e.ed ?? '', e.en ?? '',
+    .concat(EV.map(e => [e.k + 1, e.s, e.tpk, e.start, e.t0, e.end, e.cls, e.tier, pFlare(e) ?? '', 1 + (e.n_comp || 0), e.n_marg || 0, e.snr, e.pkm ?? '', e.amp ?? '', e.ed ?? '', e.en ?? '',
       e.thalf ?? '', e.fit ? e.fit.alpha : '', e.rise, '"' + e.loc.map(L => L.name).join('; ') + '"',
       ...['cam', 'ccd', 'cut', 'obj', 'eid'].map(c => '"' + e.loc.map(L => L[c] ?? '').join('; ') + '"')].join(','))).join('\n');
   const blob = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
@@ -674,6 +684,8 @@
   if (!EV.some(e => e.tier !== 'gold')) $('show2wrap').hidden = true;
   if (PERIODIC) {
     $('residlabel').textContent = ' subtract spline baseline';
+    const Pb = S.prot != null ? S.prot : PFIT;
+    if (Pb != null) $('subperwrap').lastChild.textContent = ` subtract periodic baseline (P = ${Pb.toFixed(3)} d)`;
     if (S.sectors.some(s => s.p_disp)) {        // rotation followed by the fit's spline: split afterwards, for display
       $('subperwrap').lastChild.textContent = ' subtract periodic baseline (approx.)';
       $('subperwrap').title = 'This star rotates slowly enough that the baseline fit follows it with its spline. ' +

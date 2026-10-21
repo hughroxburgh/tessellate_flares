@@ -161,6 +161,9 @@ table.sect tr.quiet td{color:var(--text-dim)}
 .toggle input{accent-color:var(--accent)}
 .chart{width:100%;background:var(--plot-bg);border-radius:7px;padding:4px 0 0}
 .flaregrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(250px,1fr);gap:16px;align-items:start}
+.fprov{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:28px;margin-top:8px}
+.fprov .stat-row{border-top:none;border-bottom:1px solid var(--hairline)}
+.fprov .wide{grid-column:1/-1}
 .legend-row{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text-dim);margin:6px 2px 0}
 .legend-row i{display:inline-block;width:14px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 .empty{padding:40px;text-align:center;color:var(--text-dim);font-size:14px}
@@ -178,6 +181,7 @@ table.sect tr.quiet td{color:var(--text-dim)}
   #aladin{min-height:300px}
 }
 @media (max-width:640px){
+  .fprov{grid-template-columns:minmax(0,1fr)}
   main{padding:26px 14px 56px}
   h1{font-size:25px}
   .kpi{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
