@@ -324,9 +324,10 @@
   function shadeFlares(u, V, evs) {
     const ctx = u.ctx, top = u.bbox.top, h = u.bbox.height, dpr = devicePixelRatio || 1;
     ctx.save(); clip(u);
-    for (const e of evs) {
-      const a = u.valToPos(toPlot(V, Math.min(e.start, e.tpk - 0.004), e.s), 'x', true);
-      const b = u.valToPos(toPlot(V, Math.max(e.end, e.tpk + 0.004), e.s), 'x', true);
+    for (const e of evs) {                    // edges half a frame outside the first / last frame: between data points
+      const half = e.w ? e.w.dt / 2 : 0;
+      const a = u.valToPos(toPlot(V, Math.min(e.start, e.tpk) - half, e.s), 'x', true);
+      const b = u.valToPos(toPlot(V, Math.max(e.end, e.tpk) + half, e.s), 'x', true);
       ctx.fillStyle = e.k === SEL ? 'rgba(255,214,110,0.32)' : 'rgba(255,214,110,0.15)';
       ctx.fillRect(a, top, Math.max(b - a, 3 * dpr), h);
     }
