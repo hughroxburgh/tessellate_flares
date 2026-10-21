@@ -96,7 +96,8 @@ TF.summary().then(s => {
               [k.flares.toLocaleString(), 'flares on those stars'],
               [k.gold.toLocaleString(), 'gold flares'],
               [`${(100 * k.frac_complex).toFixed(0)}%`, 'of flares complex' + (k.frac_marginal != null ? `, ${(100 * k.frac_marginal).toFixed(0)}% marginal` : '') + ' (S/N dependent)'],
-              k.comps_sig != null ? [k.comps_sig.toLocaleString(), `significant extra components (+ ${k.comps_marg.toLocaleString()} marginal)`]
+              // components count each flare's main flare too (Hugh); comps_sig = significant extras only
+              k.comps_sig != null ? [(k.flares + k.comps_sig).toLocaleString(), `flare components, main flares included (+${k.comps_marg.toLocaleString()} marginal)`]
                                   : [k.extra_peaks.toLocaleString(), 'extra peaks found, ' + k.extra_new.toLocaleString() + ' not in the detection catalogue'],
               [`${k.median_days.toFixed(0)} days`, 'median TESS coverage per star']]
     .concat(k.n_energy ? [[k.n_energy.toLocaleString(), 'flares with a TESS-band energy (Gaia distance)']] : [])
