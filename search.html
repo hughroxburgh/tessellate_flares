@@ -1,0 +1,117 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Browse the Catalogue — TESSELLATE Flare Stars</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css?v=28">
+<main class="wide">
+  <a class="home" href="index.html">&larr; Catalogue home</a>
+  <h1 style="font-size:24px">Browse the Flare Stars</h1>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="Gaia DR3 ID, or RA Dec [radius&prime;] in degrees&hellip;" autocomplete="off" spellcheck="false">
+    <div class="filters">
+      <label><input type="checkbox" id="fmany"> 5 or more flares</label>
+      <label><input type="checkbox" id="fcomplex"> with complex flares</label>
+      <label><input type="checkbox" id="frot"> with a rotation period</label>
+      <label>Sector <select id="fsec"><option value="">any</option></select></label>
+    </div>
+    <div id="hits"></div>
+  </div>
+  <div class="tablewrap"><table class="cat"><thead><tr>
+    <th data-k="i" tabindex="0" role="button">Gaia DR3</th>
+    <th data-k="g" tabindex="0" role="button">G</th>
+    <th data-k="c" tabindex="0" role="button">BP&minus;RP</th>
+    <th data-k="n" tabindex="0" role="button" aria-sort="descending" title="Flare events on this star (gold and secondary)">Flares</th>
+    <th data-k="x" tabindex="0" role="button" title="Flares classed complex">Complex</th>
+    <th data-k="rt" tabindex="0" role="button" title="Catalogue flares per day of TESS observation">Rate /day</th>
+    <th data-k="e" tabindex="0" role="button" title="Largest flare, equivalent duration in seconds">Max ED (s)</th>
+    <th data-k="p" tabindex="0" role="button" title="Rotation period, where a significant one was found">P<sub>rot</sub> (d)</th>
+    <th>Sectors</th>
+    <th id="sephead" hidden>Sep</th>
+  </tr></thead><tbody id="rows"></tbody></table></div>
+</main>
+<script src="assets/common.js?v=27"></script>
+<script>
+const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
+let DATA = [], VIEW = [], sortKey = 'n', sortDir = -1, shown = 0, CONE = null;
+const CHUNK = 300;
+const $ = id => document.getElementById(id);
+
+// windowed rendering: the whole list stays in memory, rows are added as you scroll
+function draw(reset) {
+  if (reset) { rows.innerHTML = ''; shown = 0; }
+  const next = VIEW.slice(shown, shown + CHUNK);
+  rows.insertAdjacentHTML('beforeend', next.map(o => TF.row(o)).join(''));
+  shown += next.length;
+  hits.textContent = `${VIEW.length.toLocaleString()} of ${DATA.length.toLocaleString()} stars` +
+    (CONE ? ` within ${CONE.r}′ of (${CONE.ra}, ${CONE.dec})` : '') +
+    (shown < VIEW.length ? ` — ${shown.toLocaleString()} loaded, scroll for more` : '');
+}
+function apply() {
+  const sec = $('fsec').value;
+  const extra = o => (!$('fmany').checked || o.n >= 5) && (!$('fcomplex').checked || o.x > 0) &&
+                     (!$('frot').checked || o.p != null) && (!sec || o.s.includes(+sec));
+  const {list, cone} = TF.filterSort(DATA, q.value, sortKey, sortDir, extra);
+  CONE = cone; $('sephead').hidden = !cone;
+  VIEW = list; draw(true);
+}
+function sortBy(th) {
+  const k = th.dataset.k;
+  sortDir = (k === sortKey) ? -sortDir : (k === 'i' || k === 'g' || k === 'c' ? 1 : -1);
+  sortKey = k;
+  document.querySelectorAll('th[data-k]').forEach(h => h.removeAttribute('aria-sort'));
+  th.setAttribute('aria-sort', sortDir > 0 ? 'ascending' : 'descending');
+  apply(); window.scrollTo({top: 0});
+}
+document.querySelectorAll('th[data-k]').forEach(th => {
+  th.addEventListener('click', () => sortBy(th));
+  th.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sortBy(th); } });
+});
+q.addEventListener('input', apply);
+for (const id of ['fmany', 'fcomplex', 'frot', 'fsec']) $(id).addEventListener('change', apply);
+window.addEventListener('scroll', () => {
+  if (shown < VIEW.length && window.innerHeight + window.scrollY > document.body.offsetHeight - 600) draw(false);
+});
+
+// keep the browse state when coming back from a star page (per tab, never sent anywhere)
+const SKEY = 'tessellate.flares.browse';
+function saveState() {
+  try { sessionStorage.setItem(SKEY, JSON.stringify({q: q.value, sortKey, sortDir, y: window.scrollY,
+    fmany: $('fmany').checked, fcomplex: $('fcomplex').checked, frot: $('frot').checked, fsec: $('fsec').value})); } catch (e) {}
+}
+function restoreState() {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(SKEY) || 'null'); if (!v) return null;
+    q.value = v.q || ''; $('fmany').checked = !!v.fmany; $('fcomplex').checked = !!v.fcomplex;
+    $('frot').checked = !!v.frot; $('fsec').value = v.fsec || '';
+    if (v.sortKey) {
+      sortKey = v.sortKey; sortDir = v.sortDir || -1;
+      document.querySelectorAll('th[data-k]').forEach(h => h.removeAttribute('aria-sort'));
+      const th = document.querySelector(`th[data-k="${sortKey}"]`);
+      if (th) th.setAttribute('aria-sort', sortDir > 0 ? 'ascending' : 'descending');
+    }
+    return v;
+  } catch (e) { return null; }
+}
+window.addEventListener('pagehide', saveState);
+document.addEventListener('click', e => { if (e.target.closest('#rows a')) saveState(); });
+
+TF.summary().then(s => {
+  $('fsec').insertAdjacentHTML('beforeend', s.sectors.map(x => `<option value="${x}">${x}</option>`).join(''));
+  return TF.index();
+}).then(j => {
+  DATA = j;
+  const v = restoreState();
+  apply();
+  if (v && v.y) {
+    let guard = 0;
+    (function seek() {
+      if (window.scrollY < v.y && shown < VIEW.length && guard++ < 200) draw(false);
+      if (document.body.offsetHeight >= v.y + window.innerHeight || shown >= VIEW.length) { window.scrollTo(0, v.y); return; }
+      if (guard < 200) requestAnimationFrame(seek); else window.scrollTo(0, v.y);
+    })();
+  }
+}).catch(() => { hits.textContent = 'Could not load the catalogue index.'; });
+</script>
+</html>
