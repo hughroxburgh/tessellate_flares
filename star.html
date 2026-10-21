@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/site.css?v=29">
+<link rel="stylesheet" href="assets/site.css?v=33">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
 <main class="wide star" id="main">
   <a class="home" href="index.html">&larr; Catalogue</a>
@@ -41,12 +41,13 @@
       <div class="toggles">
         <label class="toggle" title="The fitted model: the main flare (cobalt), significant extra components (gold dashed) and marginal ones (faint gold dotted)"><input type="checkbox" id="showfeat"> show components</label>
         <label class="toggle" title="Flux left after the fitted model (main flare + significant components), in units of each frame's noise"><input type="checkbox" id="subfit"> subtract model</label>
+        <label class="toggle" title="Model curves at full time resolution (instantaneous), not averaged over each 10-min exposure"><input type="checkbox" id="hires" checked> full time resolution</label>
       </div>
     </div>
     <div class="flaregrid">
       <div>
         <div id="flarechart" class="chart"></div>
-        <div id="fprov" class="fprov"></div>
+        <div id="fcomp" class="fcomp"></div>
       </div>
       <div id="fstats"></div>
     </div>
@@ -68,5 +69,5 @@
 </main>
 <script src="assets/common.js?v=27"></script>
 <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js"></script>
-<script src="assets/star.js?v=39"></script>
+<script src="assets/star.js?v=47"></script>
 </html>

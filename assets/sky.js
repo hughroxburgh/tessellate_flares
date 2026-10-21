@@ -232,7 +232,7 @@ const TFSky = (() => {
     function grid() {
       const step = gridStep(), b = VIEW.box;
       ctx.beginPath(); path(d3.geoGraticule().step([step, step]).extentMajor(b).extentMinor(b)());
-      ctx.strokeStyle = 'rgba(244,234,235,0.14)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = `rgba(${getComputedStyle(document.documentElement).getPropertyValue('--ink-rgb').trim()},0.14)`; ctx.lineWidth = 1; ctx.stroke();
     }
     function labels() {                    // drawn last, with a dark outline, so they read over the stars
       const pxPerDeg = proj.scale() * RAD, step = gridStep();
@@ -274,7 +274,7 @@ const TFSky = (() => {
         return p && p[0] > -40 && p[0] < W + 40 && p[1] > -20 && p[1] < H + 20 && onMap(p[0], p[1]) ? p : null;
       };
       ctx.save();
-      ctx.strokeStyle = 'rgba(244,234,235,0.55)'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = `rgba(${getComputedStyle(document.documentElement).getPropertyValue('--ink-rgb').trim()},0.55)`; ctx.lineWidth = 1.2; ctx.setLineDash([3, 3]);
       for (const f of FEATURES) if (f.r && at(f.ra, f.dec)) {
         ctx.beginPath(); path(d3.geoCircle().center([-f.ra, f.dec]).radius(f.r)()); ctx.stroke();
       }

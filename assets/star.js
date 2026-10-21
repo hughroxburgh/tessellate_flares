@@ -328,7 +328,7 @@
       const half = e.w ? e.w.dt / 2 : 0;
       const a = u.valToPos(toPlot(V, Math.min(e.start, e.tpk) - half, e.s), 'x', true);
       const b = u.valToPos(toPlot(V, Math.max(e.end, e.tpk) + half, e.s), 'x', true);
-      ctx.fillStyle = e.k === SEL ? 'rgba(255,214,110,0.32)' : 'rgba(255,214,110,0.15)';
+      ctx.fillStyle = e.k === SEL ? `rgba(${C('--band-rgb')},0.32)` : `rgba(${C('--band-rgb')},0.15)`;
       ctx.fillRect(a, top, Math.max(b - a, 3 * dpr), h);
     }
     ctx.restore();
@@ -343,7 +343,7 @@
       if (V.segs[j].contig) continue;
       const a = u.valToPos(V.segs[j - 1].p1, 'x', true), b = u.valToPos(V.segs[j].p0, 'x', true);
       if (b < L || a > Rr) continue;
-      ctx.fillStyle = 'rgba(244,234,235,0.035)';
+      ctx.fillStyle = `rgba(${C('--ink-rgb')},0.035)`;
       ctx.fillRect(Math.max(a, L), top, Math.min(b, Rr) - Math.max(a, L), bot - top);
       const m = (a + b) / 2, h = 7 * dpr;
       ctx.strokeStyle = C('--text-dim'); ctx.lineWidth = 1.4 * dpr;
@@ -380,7 +380,7 @@
       })() : []),
       series: [{},
                {stroke: C('--c-base'), width: 1.8, points: {show: false}, show: $('showbase').checked},   // baseline (zero when subtracted)
-               {stroke: 'rgba(234,223,224,0.55)', width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
+               {stroke: `rgba(${C('--data-rgb')},0.55)`, width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
                {stroke: C('--c-flare'), width: 1.8, points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],   // flares
       cursor: CURSOR(2), legend: {show: false},
       hooks: {drawClear: [u => shadeFlares(u, V, evs)], draw: [u => drawGaps(u, V)],
@@ -416,22 +416,46 @@
   // exponential decay; all averaged over the exposure (N_SUB sub-samples). Times in hours from the peak frame.
   // Only the significant (kept) components are returned. Each curve is null before its onset (drawn from where it starts).
   const riseShape = (u, w) => { const z = Math.max(u / w, -1); return (1 - z * z) ** 2; };
-  function compModel(xh, cm, cadh) {
-    const N_SUB = 15, p = cm.p;
-    const mainShape = u => u < 0 ? riseShape(u, p[2]) :
-      cm.kind === 'PL' ? Math.pow(1 + u / p[3], -p[4]) : (1 - p[5]) * Math.exp(-u / p[3]) + p[5] * Math.exp(-u / p[4]);
-    const compShape = (u, q) => u < 0 ? riseShape(u, q[2]) : Math.exp(-u / q[3]);
-    const avg = f => xh.map(x => { let a = 0; for (let k = 0; k < N_SUB; k++) a += f(x + ((k + 0.5) / N_SUB - 0.5) * cadh); return a / N_SUB; });
+
+  // ---- Gaussian-convolved shapes (Mendoza et al. 2022 form) ----
+  // gResp(u, C, tau) = Gaussian exp(-u^2/C^2) convolved with exp(-u/tau) (u >= 0), no constant factor; erfc from the
+  // Numerical Recipes Chebyshev fit (rel. error < 1.2e-7) folded into the exponent so nothing overflows.
+  const erfcPoly = t => -1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806 + t * (0.27886807 +
+    t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277))))))));
+  function gResp(u, C, tau) {
+    const z = -u / C + C / (2 * tau), e = -u / tau + (C / (2 * tau)) ** 2;
+    const t = 1 / (1 + 0.5 * Math.abs(z)), ec = t * Math.exp(e - z * z + erfcPoly(t));     // exp(e) erfc(|z|)
+    return z >= 0 ? ec : 2 * Math.exp(e) - ec;
+  }
+  const peakOf = (f, C, tmax) => { let m = 1e-300; for (let i = 0; i < 400; i++) m = Math.max(m, f(-2 * C + (tmax + 2 * C) * i / 399)); return m; };
+  function g2eMain(p) {          // p = [t0, A, C, tau1, dtau, F2]
+    const C = p[2], t1 = p[3], t2 = p[3] + p[4], F = p[5];
+    const f = u => (1 - F) * gResp(u, C, t1) + F * gResp(u, C, t2), pk = peakOf(f, C, 3 * t1 + 3 * C);
+    return u => f(u) / pk;
+  }
+  function g1eComp(q) {          // q = [tc, Ac, C, td]
+    const f = u => gResp(u, q[2], q[3]), pk = peakOf(f, q[2], 3 * q[3] + 3 * q[2]);
+    return u => f(u) / pk;
+  }
+  function compModel(xh, cm, cadh, inst) {           // inst: instantaneous curves (no exposure averaging)
+    const N_SUB = 15, p = cm.p, G = cm.kind === 'G2E';
+    const g2 = G ? g2eMain(p) : null;
+    const mainShape = G ? g2 : (u => u < 0 ? riseShape(u, p[2]) :
+      cm.kind === 'PL' ? Math.pow(1 + u / p[3], -p[4]) : (1 - p[5]) * Math.exp(-u / p[3]) + p[5] * Math.exp(-u / p[4]));
+    const avg = f => xh.map(x => { if (inst) return f(x); let a = 0; for (let k = 0; k < N_SUB; k++) a += f(x + ((k + 0.5) / N_SUB - 0.5) * cadh); return a / N_SUB; });
     const main = avg(t => p[1] * mainShape(t - p[0]));
     const kept = cm.comps.filter(c => c.kept);
-    const comps = kept.map(c => avg(t => c.p[1] * compShape(t - c.p[0], c.p)));
+    const comps = kept.map(c => { const s = G ? g1eComp(c.p) : (u => u < 0 ? riseShape(u, c.p[2]) : Math.exp(-u / c.p[3]));
+                                  return avg(t => c.p[1] * s(t - c.p[0])); });
     const tot = main.map((v, i) => v + comps.reduce((a, c) => a + c[i], 0));
-    const from = (arr, t0) => arr.map((v, i) => xh[i] < t0 - cadh / 2 ? null : v);       // null before the onset
-    return {main: from(main, p[0] - p[2]), comps: comps.map((c, j) => from(c, kept[j].p[0] - kept[j].p[2])), tot,
+    const pad = inst ? 0 : cadh / 2, on = q => q[0] - (G ? 3 : 1) * q[2];
+    const from = (arr, t0) => arr.map((v, i) => xh[i] < t0 - pad ? null : v);       // null before the onset
+    const first = Math.min(on(p), ...kept.map(c => on(c.p)));                     // the total starts with its earliest part
+    return {main: from(main, on(p)), comps: comps.map((c, j) => from(c, on(kept[j].p))), tot: from(tot, first),
             sig: kept.map(c => c.sig)};
   }
   // flare features in the inset: one colour for all of them, named inside their shaded regions
-  const FEAT = 'rgba(255,214,110,0.16)', FEAT_TEXT = '#f3d58a';
+  const FEAT = `rgba(${C('--band-rgb')},0.16)`, FEAT_TEXT = C('--feat-text');
   const FEAT_LABEL = {main: 'main peak', peak: 'extra peak', shoulder: 'shoulder', precursor: 'precursor', possible: '2–3σ'};
   // Frames drawn in red, as indices into the window (indices, not times: comparing rounded times once dropped a
   // single-frame rise's peak). From the peak frame walk back while the flux is above 1 sigma, stepping over at most
@@ -487,18 +511,20 @@
     }
     const showFit = $('showfeat').checked && ev.cm && !subFit;     // 'show components': the model as dashed curves
     let data, series = [{},
-      {stroke: 'rgba(234,223,224,0.30)', width: 1, spanGaps: true,
-       points: {show: true, size: 3.5, space: 0, fill: '#cdb8bc', stroke: '#cdb8bc'}},
+      {stroke: `rgba(${C('--data-rgb')},0.30)`, width: 1, spanGaps: true,
+       points: {show: true, size: 3.5, space: 0, fill: C('--c-pts'), stroke: C('--c-pts')}},
       {stroke: showFit ? 'rgba(0,0,0,0)' : C('--c-flare'), width: 2.2, spanGaps: true,     // with the fit on, the fit is the line
        points: {show: true, size: 5, space: 0, fill: C('--c-flare'), stroke: C('--c-flare')}}];
     if (showFit) {                                      // main flare (cobalt) and each significant component (gold)
-      const N = 500, x0 = ev.cm.x0, x1 = ev.cm.x1;
+      const N = 2000, x0 = ev.cm.x0, x1 = ev.cm.x1;
       const xm = Array.from({length: N}, (_, i) => x0 + (x1 - x0) * i / (N - 1));
-      const cmod = compModel(xm, ev.cm, w.dt * 24);
-      data = uPlot.join([[xs, ys, yf], [xm, cmod.main, ...cmod.comps]]);
-      series.push({stroke: C('--c-base'), width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}},
-                  ...cmod.sig.map(sig => sig ? {stroke: '#f3c35a', width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}}    // significant
-                                             : {stroke: 'rgba(243,195,90,0.6)', width: 1.4, dash: [2, 4], spanGaps: false, points: {show: false}}));  // marginal
+      const inst = $('hires') && $('hires').checked;
+      const cmod = compModel(xm, ev.cm, w.dt * 24, inst);
+      data = uPlot.join([[xs, ys, yf], [xm, cmod.tot, cmod.main, ...cmod.comps]]);
+      series.push({stroke: `rgba(${C('--ink-rgb')},0.85)`, width: 1.4, spanGaps: false, points: {show: false}},   // total model
+                  {stroke: C('--c-base'), width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}},
+                  ...cmod.sig.map(sig => sig ? {stroke: `rgb(${C('--gold-rgb')})`, width: 2.2, dash: [7, 4], spanGaps: false, points: {show: false}}    // significant
+                                             : {stroke: `rgba(${C('--gold-rgb')},0.6)`, width: 1.4, dash: [2, 4], spanGaps: false, points: {show: false}}));  // marginal
     } else data = [xs, ys, yf];
     const KD = subFit ? 1 : KU.get(ev.s);               // display units (sigma units are left alone)
     if (KD !== 1) data = data.map((a, i) => i === 0 ? a : a.map(v => v == null ? v : v * KD));
@@ -535,14 +561,14 @@
         }],
         drawAxes: [u => {                                                 // zero (the baseline, or the decay fit): over the grid, under the data
           const ctx = u.ctx, dpr = devicePixelRatio || 1, y0 = u.valToPos(0, 'y', true);
-          ctx.save(); clip(u); ctx.strokeStyle = 'rgba(244,234,235,0.6)'; ctx.lineWidth = 1.5 * dpr;
+          ctx.save(); clip(u); ctx.strokeStyle = `rgba(${C('--ink-rgb')},0.6)`; ctx.lineWidth = 1.5 * dpr;
           ctx.beginPath(); ctx.moveTo(u.bbox.left, y0); ctx.lineTo(u.bbox.left + u.bbox.width, y0); ctx.stroke();
           ctx.restore();
         }],
         draw: [u => {                                                     // error bars
           const ctx = u.ctx;
           if (subFit) return;                                             // in sigma units every bar is +-1
-          ctx.save(); clip(u); ctx.strokeStyle = 'rgba(234,223,224,0.40)'; ctx.lineWidth = devicePixelRatio || 1;
+          ctx.save(); clip(u); ctx.strokeStyle = `rgba(${C('--data-rgb')},0.40)`; ctx.lineWidth = devicePixelRatio || 1;
           const X = u.data[0], Y = u.data[1], x0 = u.scales.x.min, x1 = u.scales.x.max;
           for (let i = 0; i < X.length; i++) {
             if (Y[i] == null || !err.has(X[i]) || X[i] < x0 || X[i] > x1) continue;
@@ -563,6 +589,61 @@
     $('subfit').disabled = !ev.cm;
   }
 
+  // ---------------- fitted model parameters: one table row per part (main flare + each kept component) ----------------
+  // Instantaneous unit-peak shape of a part, u in hours from its t0 / tc (as in compModel).
+  function partShape(cm, q, isMain) {
+    if (cm.kind === 'G2E') return isMain ? g2eMain(q) : g1eComp(q);
+    if (!isMain) return u => u < 0 ? riseShape(u, q[2]) : Math.exp(-u / q[3]);
+    return u => u < 0 ? riseShape(u, q[2]) :
+      cm.kind === 'PL' ? Math.pow(1 + u / q[3], -q[4]) : (1 - q[5]) * Math.exp(-u / q[3]) + q[5] * Math.exp(-u / q[4]);
+  }
+  // [peak position (h from t0 / tc), FWHM (h)] of a unit-peak shape, on a grid from a to b hours
+  function peakWidth(f, a, b) {
+    const N = 6000, u = i => a + (b - a) * i / (N - 1), v = Array.from({length: N}, (_, i) => f(u(i)));
+    let k = 0; for (let i = 1; i < N; i++) if (v[i] > v[k]) k = i;
+    let i0 = k, i1 = k; while (i0 > 0 && v[i0 - 1] >= v[k] / 2) i0--; while (i1 < N - 1 && v[i1 + 1] >= v[k] / 2) i1++;
+    return [u(k), u(i1) - u(i0)];
+  }
+  function compTable(ev) {
+    const el = $('fcomp');
+    if (!ev.cm || !ev.cm.p) { el.innerHTML = ''; return; }
+    const cm = ev.cm, p = cm.p, G = cm.kind === 'G2E', PL = cm.kind === 'PL', K = KU.get(ev.s), m = v => v * 60;
+    const kept = cm.comps.filter(c => c.kept);
+    // shape columns by model kind: [header, main value (min or plain), component value]
+    const cols = G ? [['C', m(p[2]), q => m(q[2])], ['&tau;<sub>fast</sub>', m(p[3]), q => m(q[3])],
+                      ['&tau;<sub>slow</sub>', m(p[3] + p[4]), null], ['Slow', `${fmt(100 * p[5], 0)}%`, null]]
+               : PL ? [['w', m(p[2]), q => m(q[2])], ['t<sub>s</sub>', m(p[3]), q => m(q[3])], ['&alpha;', fmt(p[4], 2), null]]
+               : [['w', m(p[2]), q => m(q[2])], ['&tau;<sub>1</sub>', m(p[3]), q => m(q[3])],
+                  ['&tau;<sub>2</sub>', m(p[4]), null], ['Slow', `${fmt(100 * p[5], 0)}%`, null]];
+    const span = (q, isMain) => {                       // grid wide enough for the slowest decay of this part
+      const lead = G ? 3 * q[2] : q[2], tail = isMain ? (G ? q[3] + q[4] : PL ? 20 * q[3] : Math.max(q[3], q[4])) : q[3];
+      return [-lead, Math.min(48, 6 * tail + 3 * q[2])];
+    };
+    const row = (q, isMain, c) => {
+      const [up, wd] = peakWidth(partShape(cm, q, isMain), ...span(q, isMain));
+      return {t: q[0] + up, q, isMain, c, fwhm: isMain ? wd : (c.fwhm ?? wd),
+              share: isMain ? 1 - kept.reduce((a, k) => a + (k.f || 0), 0) : c.f};
+    };
+    const rows = [row(p, true, null)].concat(kept.map(c => row(c.p, false, c)).sort((a, b) => a.t - b.t));
+    const val = v => typeof v === 'number' ? fmt(v, v >= 100 ? 0 : 1) : v;
+    let n = 1;
+    const body = rows.map(r => {
+      const name = r.isMain ? 'Main flare' : `Component ${++n}` + (r.c.sig ? '' : ' <span class="sub">(marginal)</span>');
+      const sw = `<i class="sw" style="border-color:${r.isMain ? C('--c-base') : r.c.sig ? `rgb(${C('--gold-rgb')})` : `rgba(${C('--gold-rgb')},0.6)`}${!r.isMain && !r.c.sig ? ';border-top-style:dotted' : ''}"></i>`;
+      const shape = cols.map(([, mv, cf]) => r.isMain ? val(mv) : cf ? val(cf(r.q)) : '&mdash;');
+      return `<tr${!r.isMain && !r.c.sig ? ' class="quiet"' : ''}><td>${sw}${name}</td><td>${r.t >= 0 ? '+' : '&minus;'}${fmt(Math.abs(r.t), 2)}</td>` +
+        `<td>${fU(r.q[1] * K)}</td><td>${r.share == null ? '&mdash;' : fmt(100 * r.share, 0) + '%'}</td><td>${fmt(m(r.fwhm), 1)}</td>` +
+        shape.map(v => `<td>${v}</td>`).join('') + `<td>${r.isMain ? '&mdash;' : fmt(r.c.dchi2, 0)}</td></tr>`;
+    }).join('');
+    const head = ['Part', 't<sub>peak</sub> (h)', `Peak (${UNIT_H})`, 'Flux', 'FWHM'].concat(cols.map(([h]) => h), ['&Delta;&chi;&sup2;']);
+    const what = G ? 'Each part is a Gaussian heating profile (width C) convolved with exponential cooling: two exponentials for the main flare (&tau;<sub>fast</sub>, &tau;<sub>slow</sub>; slow: the slow exponential&rsquo;s share), one for each extra component.'
+                   : PL ? 'Main flare: a rise of width w into a power-law decay (scale t<sub>s</sub>, index &alpha;); extra components: the same rise into one exponential.'
+                   : 'Main flare: a rise of width w into two exponentials (&tau;<sub>1</sub>, &tau;<sub>2</sub>; slow: the second&rsquo;s share); extra components: the same rise into one exponential.';
+    el.innerHTML = `<p class="sec">Fitted model</p><div class="tablewrap"><table class="sect comp"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead>` +
+      `<tbody>${body}</tbody></table></div><p class="hint">${what} Times in minutes except t<sub>peak</sub>, each part&rsquo;s own maximum in hours from the brightest frame; ` +
+      `flux: share of the flare&rsquo;s integrated flux. Peak and FWHM are the model at full time resolution, so a sharp peak comes out above the brightest 10-minute frame. Components with &Delta;&chi;&sup2; &gt; 20 are significant, 10&ndash;20 marginal.</p>`;
+  }
+
   // ---------------- selected-flare details ----------------
   function reason(ev) {
     if (ev.cm) {
@@ -578,34 +659,32 @@
   }
   function showStats(ev) {
     $('ftitle').innerHTML = `Flare ${ev.k + 1} of ${EV.length} &middot; sector ${ev.s}`;
+    const stack = (l, v) => `<div class="stat-row stack"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`;
+    // two groups (Hugh): where TESSELLATE found it, then what the flare is like
     $('fstats').innerHTML =
+      stack('Detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
+        `<span>S${ev.s} &middot; cam&nbsp;${L.cam} &middot; ccd&nbsp;${L.ccd} &middot; cut&nbsp;${L.cut} &middot; obj&nbsp;${L.obj} &middot; event&nbsp;${L.eid}</span>`).join('<br>') : '&mdash;') +
+      stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
+      stat('Catalogue entr' + (ev.loc.length > 1 ? 'ies' : 'y'), ev.loc.map(L => `<span class="sub">${TF.esc(L.name)}</span>`).join('<br>') || '&mdash;') +
+      stat('Peak frame', `MJD ${ev.tpk.toFixed(4)}<br><span class="sub">${TF.mjdToUTC(ev.tpk)} UTC</span>`) +
+      stat('p<sub>Flare</sub> <span class="sub">(ML classifier)</span>', ev.loc.length ? ev.loc.map(L => fmt(L.p, 3)).join(', ') : '&mdash;') +
+      stat('Tier', ev.tier) +
+      `<hr class="split">` +
       stat('Class', `${TF.tag(ev.cls)}`) +
       `<p class="hint" style="margin:2px 0 6px">${reason(ev)}</p>` +
-      stat('Peak frame', `MJD ${ev.tpk.toFixed(4)}<br><span class="sub">${TF.mjdToUTC(ev.tpk)} UTC</span>`) +
-      stat('Tier', ev.tier) +
-      stat('p<sub>Flare</sub> <span class="sub">(ML classifier)</span>', ev.loc.length ? ev.loc.map(L => fmt(L.p, 3)).join(', ') : '&mdash;') +
       stat('Peak S/N', fmt(ev.snr, 1)) +
       stat('Peak excess', ev.pkm != null && MJY ? `${sig3(ev.pkm)} mJy` : ev.pk != null ? `${sig3(ev.pk)} e&#8315;/s` : '&mdash;') +
       stat('Amplitude &Delta;F/F', ev.amp == null ? '&mdash;' : sig3(ev.amp)) +
       stat('Equivalent duration', ev.ed == null ? '&mdash;' : `${sig3(ev.ed)} s`) +
       stat('Energy <span class="sub">(TESS band)</span>', ev.en == null ? '&mdash;' : `${sci(ev.en)} erg`) +
       stat('Decay half-time t<sub>&frac12;</sub>', ev.cm && ev.cm.th != null ? `${fmt(ev.cm.th, 1)} min` : '&mdash;') +
-      stat('Decay model', !ev.cm ? '&mdash;' : ev.cm.kind === 'PL' ? `power law, &alpha; = ${fmt(ev.cm.p[4], 2)}` +
-        (ev.cm.p[4] > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') :
-        `double exponential <span class="sub">(${fmt(ev.cm.p[3] * 60, 0)} and ${fmt(ev.cm.p[4] * 60, 0)} min, slow part ${fmt(100 * ev.cm.p[5], 0)}%)</span>`) +
+      stat('Decay model', !ev.cm ? '&mdash;' : ev.cm.kind === 'G2E' ? 'Gaussian heating &otimes; two exponentials' :
+        ev.cm.kind === 'PL' ? 'power law' + (ev.cm.p[4] > 14.9 ? ' <span class="sub">(~exponential)</span>' : '') : 'double exponential') +
       stat('Rise (peak &minus; t<sub>0</sub>)', `${fmt(ev.rise, 0)} min`) +
-      // components count the main flare too (Hugh): a simple flare has 1
+      // components count the main flare too (Hugh): a simple flare has 1; parameters in the table under the chart
       stat('Components', ev.cm && (ev.n_comp || ev.n_marg) ? `${1 + (ev.n_comp || 0)}` +
-        (ev.n_marg ? ` <span class="sub">(+${ev.n_marg} marginal)</span>` : '') + '<br>' +
-        `<span class="nowrap">main flare</span><br>` + ev.cm.comps.filter(c => c.kept).map(c =>
-        `<span class="nowrap">${c.d >= 0 ? '+' : '&minus;'}${fmt(Math.abs(c.d), 2)} h${c.sig ? '' : ' (marginal)'}</span> <span class="sub">(${fmt(100 * c.a, 0)}% of peak, ` +
-        `${fmt(100 * c.f, 0)}% of flux, FWHM ${fmt(c.fwhm * 60, 0)} min, &Delta;&chi;&sup2; ${fmt(c.dchi2, 0)})</span>`).join('<br>') : `1 <span class="sub">(main flare only)</span>`);
-    // where the flare came from: under the chart, so the two columns end level
-    $('fprov').innerHTML =
-      `<div class="wide">` + stat('Detection', ev.loc.length ? ev.loc.map(L => L.cut == null ? '&mdash;' :
-        `<span class="nowrap">S${ev.s} &middot; cam ${L.cam} &middot; ccd ${L.ccd} &middot; cut ${L.cut} &middot; obj ${L.obj} &middot; event ${L.eid}</span>`).join('<br>') : '&mdash;') +
-      `</div>` + stat('Localisation, 3&sigma; radius', ev.loc.length ? ev.loc.map(L => `${fmt(R3(L) * 3600, 1)}&Prime;`).join(', ') : '&mdash;') +
-      stat('Catalogue entr' + (ev.loc.length > 1 ? 'ies' : 'y'), ev.loc.map(L => `<span class="sub">${TF.esc(L.name)}</span>`).join('<br>') || '&mdash;');
+        (ev.n_marg ? ` <span class="sub">(+${ev.n_marg} marginal)</span>` : '') : `1 <span class="sub">(main flare only)</span>`);
+    compTable(ev);
   }
 
   // ---------------- flare table ----------------
@@ -657,6 +736,7 @@
   $('showbase').addEventListener('change', () => OV.setSeries(1, {show: $('showbase').checked}));
   $('subfit').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], false); });
   $('showfeat').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
+  if ($('hires')) $('hires').addEventListener('change', () => { if (SEL != null) drawFlare(EV[SEL], true); });
   $('show2').addEventListener('change', () => {
     renderTabs(); renderTable(); skyAll();
     if (SEL != null && !visible().some(e => e.k === SEL)) {       // the selected flare was just hidden
