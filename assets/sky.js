@@ -1,12 +1,15 @@
 // Interactive sky map for the home page: the flare stars on a Mollweide map (default) or a globe, both seen from
 // inside the sky (RA increases to the left). Mollweide: drag to pan, scroll / pinch to zoom. Globe: drag to rotate.
-// Zoomed out it shows a density map (stars per cell, so 100k stars stay readable); zoomed in, each star is a dot sized
+// Zoomed out it shows a density map -- stars per cell, or flares per deg^2 per day of TESS observation (each cell's
+// exposure from assets/sky_exposure.json, made by FlareStars/code/sky_exposure.py) -- so 100k stars stay readable;
+// zoomed in, each star is a dot sized
 // by its number of flares and coloured by its flare rate -- hover for details, click to open its page. The grid is
 // labelled in degrees and the cursor's RA / Dec is shown above the map; "Expand" opens it nearly full screen.
 // Needs d3 v7 (index.html loads it from cdnjs) and common.js (TF).
 const TFSky = (() => {
   const RAD = Math.PI / 180;
-  const CELL = 2.0;                    // density cell size (deg)
+  const CELL = 3.0;                    // density cell size (deg); = sky_exposure.json's cell (code/sky_exposure.py)
+  const MIN_EXP = 0.25;                // rate view: cells observed for < this x (cell area x one sector) are left blank
   const K_POINTS_IN = 2.6, K_POINTS = 4.0;   // zoom where the dots start fading in / are fully shown
   const K_MAX = 120;
   const RAMP = ['#5b2a35', '#a33a4a', '#e8615f', '#ffa477', '#ffe2b8'];   // = the population figures' warm ramp
@@ -103,7 +106,7 @@ const TFSky = (() => {
         const ring = [[lo0, la0], [lm, la0], [lo1, la0], [lo1, la1], [lm, la1], [lo0, la1], [lo0, la0]];
         let poly = {type: 'Polygon', coordinates: [ring]};
         if (d3.geoArea(poly) > 2 * Math.PI) poly = {type: 'Polygon', coordinates: [ring.slice().reverse()]};
-        cells.set(key, c = {lon: lm, lat: dc, n: 0, poly, idx: []});
+        cells.set(key, c = {key, lon: lm, lat: dc, n: 0, poly, ring, dlon: 360 / n, idx: []});
       }
       c.n++; c.idx.push(i);
     });
@@ -121,12 +124,31 @@ const TFSky = (() => {
     const cells = densityCells(stars);
     // two layers, gold flare stars (on) and silver sources (off); density counts the layers that are on
     for (const c of cells) { c.nS = c.idx.reduce((a, i) => a + (stars[i].sv ? 1 : 0), 0); c.nG = c.n - c.nS; }
+    for (const c of cells) {               // flares in the cell, per layer (the rate view)
+      c.fG = c.idx.reduce((a, i) => a + (stars[i].sv ? 0 : stars[i].n || 0), 0);
+      c.fS = c.idx.reduce((a, i) => a + (stars[i].sv ? stars[i].n || 0 : 0), 0);
+    }
     const LAYER = {g: true, s: false}, grey = d3.interpolateRgb('#3a3236', '#ece6e8');
-    let maxN = 1, lmax = 1;
+    let METRIC = 'stars', EXP = null, allCells = cells;   // EXP: sky_exposure.json, once loaded
+    let maxN = 1, lmax = 1, rLo = 0, rHi = 1;
     function cellCols() {
+      const ramp_ = LAYER.g ? ramp : grey;
+      if (METRIC === 'rate' && EXP) {     // flares per deg^2 per day; observed cells without flares at the bottom colour
+        const fl = c => (LAYER.g ? c.fG : 0) + (LAYER.s ? c.fS : 0);
+        for (const c of allCells) {
+          const e = EXP.e[c.key], a = EXP.a[c.key];
+          c.rate = e && a && e >= MIN_EXP * a * EXP.days_per_sector ? fl(c) / e : null;
+        }
+        const v = allCells.map(c => c.rate).filter(x => x > 0).sort((a, b) => a - b);
+        rLo = v.length ? v[Math.floor(0.02 * (v.length - 1))] : 1e-3; rHi = v.length ? v[Math.floor(0.99 * (v.length - 1))] : 1;
+        const lr = Math.log10(rHi / rLo) || 1;
+        for (const c of allCells) c.col = c.rate == null ? null
+          : ramp_(Math.max(0, Math.min(1, Math.log10(Math.max(c.rate, rLo) / rLo) / lr)));
+        return;
+      }
       const cnt = c => (LAYER.g ? c.nG : 0) + (LAYER.s ? c.nS : 0);
       maxN = Math.max(1, ...cells.map(cnt)); lmax = Math.log10(maxN + 1);
-      for (const c of cells) { const n = cnt(c); c.col = n ? (LAYER.g ? ramp : grey)(Math.log10(n + 1) / lmax) : null; }
+      for (const c of allCells) { const n = cnt(c); c.col = n ? ramp_(Math.log10(n + 1) / lmax) : null; }
     }
     cellCols();
     for (const s of stars) {                 // dot colour (flare rate) and size (flares), once
@@ -148,7 +170,8 @@ const TFSky = (() => {
     const img = fig.querySelector('img'); if (img) img.remove();
     const wrap = document.createElement('div'); wrap.className = 'sky';
     wrap.innerHTML = `<div class="sky-tools">
-        <div class="seg" role="group" aria-label="Projection"><button type="button" data-p="moll" aria-pressed="true">Mollweide</button><button type="button" data-p="globe" aria-pressed="false">Globe</button></div>
+        <div class="seg sky-proj" role="group" aria-label="Projection"><button type="button" data-p="moll" aria-pressed="true">Mollweide</button><button type="button" data-p="globe" aria-pressed="false">Globe</button></div>
+        <div class="seg sky-metric" role="group" aria-label="Density map shows" hidden><button type="button" data-m="stars" aria-pressed="true">Stars</button><button type="button" data-m="rate" aria-pressed="false" title="Flares per square degree per day of TESS observation: the observing time divided out">Flares / deg² / day</button></div>
         <span class="sky-coord" aria-live="off"></span>
         <span class="sky-btns"><button type="button" class="sky-reset">Reset</button><button type="button" class="sky-exp" aria-pressed="false">Expand</button></span>
       </div>
@@ -158,7 +181,7 @@ const TFSky = (() => {
     fig.insertBefore(wrap, fig.querySelector('figcaption'));
     const cap = fig.querySelector('figcaption');
     if (cap) cap.innerHTML = `The ${stars.filter(s => !s.sv).length.toLocaleString()} flare stars (and, with the silver layer on, ${stars.filter(s => s.sv).length.toLocaleString()} silver sources) on the sky, seen from inside the celestial sphere ` +
-      `(RA increases to the left; Galactic plane dashed). Zoomed out: how many stars fall in each ${CELL}° cell; ` +
+      `(RA increases to the left; Galactic plane dashed). Zoomed out: how many stars fall in each ${CELL}° cell, or (Flares / deg² / day) the flares in each cell divided by its area and by how long TESS observed it, which takes out the extra coverage near the ecliptic poles; ` +
       `zoomed in: each star, sized by its number of flares and coloured by its flare rate. Marked: open clusters (○), ` +
       `globular clusters (⊕), star-forming regions (◇) and nearby galaxies; more appear as you zoom in.`;
     const $ = s => wrap.querySelector(s);
@@ -213,12 +236,14 @@ const TFSky = (() => {
 
     wrap.querySelector('.sky-leg').addEventListener('click', e => {
       const b = e.target.closest('[data-l]'); if (!b) return;
-      LAYER[b.dataset.l] = !LAYER[b.dataset.l]; b.setAttribute('aria-pressed', LAYER[b.dataset.l]); cellCols(); draw();
+      LAYER[b.dataset.l] = !LAYER[b.dataset.l]; b.setAttribute('aria-pressed', LAYER[b.dataset.l]); cellCols(); redraw();
     });
     function legend(mix) {
       const g = `linear-gradient(90deg, ${RAMP.join(',')})`;
       $('.sky-leg').innerHTML = mix < 0.5
-        ? `<span class="sky-ramp" style="background:${g}"></span>stars per ${CELL}° cell, 1&ndash;${maxN.toLocaleString()} (log)`
+        ? (METRIC === 'rate' && EXP
+           ? `<span class="sky-ramp" style="background:${g}"></span>flares per deg² per day, ${TF.sig3(rLo)}&ndash;${TF.sig3(rHi)} (log)`
+           : `<span class="sky-ramp" style="background:${g}"></span>stars per ${CELL}° cell, 1&ndash;${maxN.toLocaleString()} (log)`)
         : `<span class="sky-ramp" style="background:${g}"></span>flare rate, 10<sup>${RATE_LO}</sup>&ndash;1 per day (log)`;
       $('.sky-leg').insertAdjacentHTML('afterbegin', [['g', 'gold flare stars', '#f0b35a'], ['s', 'silver sources', '#d4cdcf']]
         .map(([k, t, c]) => `<button type="button" class="sky-chip" data-l="${k}" aria-pressed="${LAYER[k]}"><i style="background:${c}"></i>${t}</button>`).join(''));
@@ -343,7 +368,10 @@ const TFSky = (() => {
       ctx.restore();
     }
 
+    let raf = 0;                         // at most one redraw per animation frame (zoom / pointer events come faster)
+    const redraw = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); }); };
     function draw() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
       place();
       viewRegion();
       const centre = proj.invert([W / 2, H / 2]);
@@ -352,14 +380,27 @@ const TFSky = (() => {
       ctx.beginPath(); path({type: 'Sphere'}); ctx.fillStyle = C('--plot-bg'); ctx.fill();
 
       const mix = Math.max(0, Math.min(1, (K - K_POINTS_IN) / (K_POINTS - K_POINTS_IN)));   // 0 density .. 1 dots
-      if (mix < 1) {                                       // density cells (true sky polygons, clipped by d3)
+      if (mix < 1) {                                       // density cells
+        // each cell is its corners projected and joined by straight lines (fast); d3's clipped sky polygon only where
+        // the cell is cut by the map's edge (Mollweide: the projected cell is far wider than it can be) or the
+        // globe's horizon -- drawing every cell through d3's resampling and clipping was most of the lag
         ctx.globalAlpha = 1 - mix;
-        for (const c of cells) {
-          if (!near(c) || (mode === 'globe' && d3.geoDistance([c.lon, c.lat], centre) > Math.PI / 2 + 0.05)) continue;
-          const p = proj([c.lon, c.lat]);
-          if (mode === 'moll' && p && (p[0] < -60 || p[0] > W + 60 || p[1] < -60 || p[1] > H + 60)) continue;
-          if (!c.col) continue;
-          ctx.beginPath(); path(c.poly);
+        const sc = proj.scale(), edge = Math.PI / 2 - 2.2 * CELL * RAD;
+        for (const c of allCells) {
+          if (!c.col || !near(c)) continue;
+          const dc = mode === 'globe' ? d3.geoDistance([c.lon, c.lat], centre) : 0;
+          if (dc > Math.PI / 2 + 0.05) continue;
+          const pts = dc > edge ? null : c.ring.map(q => proj(q));
+          let fast = pts && pts.every(Boolean);
+          if (fast) {
+            let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+            for (const q of pts) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
+            if (x1 < -10 || x0 > W + 10 || y1 < -10 || y0 > H + 10) continue;          // off screen
+            if (mode === 'moll' && x1 - x0 > 1.4 * c.dlon * RAD * sc + 4) fast = false; // split by the map edge
+          }
+          ctx.beginPath();
+          if (fast) { ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); }
+          else path(c.poly);
           ctx.fillStyle = c.col; ctx.fill(); ctx.strokeStyle = c.col; ctx.lineWidth = 0.6; ctx.stroke();
         }
         ctx.globalAlpha = 1;
@@ -436,7 +477,7 @@ const TFSky = (() => {
           t = d3.zoomIdentity.translate(T.x, T.y).scale(t.k);
           d3.select(canvas).property('__zoom', t);
         }
-        last = [t.x, t.y]; T = t; hover = null; draw();
+        last = [t.x, t.y]; T = t; hover = null; redraw();
       });
     d3.select(canvas).call(zoom).on('dblclick.zoom', null);
     canvas.style.touchAction = 'pan-y';                    // d3 sets none: keep one-finger page scrolling on phones
@@ -447,12 +488,12 @@ const TFSky = (() => {
       $('.sky-coord').textContent = ll ? `RA ${fmtRA(-ll[0])}   Dec ${fmtDec(ll[1])}` : '';
       const h = q ? q[3] : null;
       canvas.style.cursor = q ? 'pointer' : 'grab';
-      if (h !== hover) { hover = h; draw(); }
+      if (h !== hover) { hover = h; redraw(); }
       showTip(q);
     });
     canvas.addEventListener('mouseleave', () => {
       tip.hidden = true; $('.sky-coord').textContent = '';
-      if (hover != null) { hover = null; draw(); }
+      if (hover != null) { hover = null; redraw(); }
     });
     canvas.addEventListener('click', e => {
       const b = canvas.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top, q = pick(x, y);
@@ -470,10 +511,10 @@ const TFSky = (() => {
     });
 
     $('.sky-reset').addEventListener('click', () => { rot.splice(0, 3, ...home); rotM[0] = rotM[1] = 0; d3.select(canvas).call(zoom.transform, d3.zoomIdentity); });
-    wrap.querySelectorAll('.seg button').forEach(bt => bt.addEventListener('click', () => {
+    wrap.querySelectorAll('.sky-proj button').forEach(bt => bt.addEventListener('click', () => {
       if (bt.dataset.p === mode) return;
       mode = bt.dataset.p;
-      wrap.querySelectorAll('.seg button').forEach(o => o.setAttribute('aria-pressed', String(o === bt)));
+      wrap.querySelectorAll('.sky-proj button').forEach(o => o.setAttribute('aria-pressed', String(o === bt)));
       makeProj(); rot.splice(0, 3, ...home); T = d3.zoomIdentity; d3.select(canvas).property('__zoom', d3.zoomIdentity); size();
     }));
     // Expand: the map spans the width of the figure grid (bigger, still in the page); it and the figures it pushes down
@@ -502,6 +543,30 @@ const TFSky = (() => {
     };
     $('.sky-exp').addEventListener('click', () => expand(!fig.classList.contains('sky-expanded')));
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && fig.classList.contains('sky-expanded')) expand(false); });
+
+    wrap.querySelectorAll('.sky-metric button').forEach(bt => bt.addEventListener('click', () => {
+      if (bt.dataset.m === METRIC) return;
+      METRIC = bt.dataset.m;
+      wrap.querySelectorAll('.sky-metric button').forEach(o => o.setAttribute('aria-pressed', String(o === bt)));
+      if (METRIC === 'rate') {             // every observed cell, with or without stars, gets a colour in this view
+        const have = new Map(cells.map(c => [c.key, c]));
+        allCells = cells.concat(Object.keys(EXP.e).filter(k => !have.has(+k)).map(k => emptyCell(+k)));
+      } else allCells = cells;
+      cellCols(); redraw();
+    }));
+    function emptyCell(key) {              // a cell with no stars (rate view: observed, no flares)
+      const band = Math.floor(key / 100000), j = key % 100000;
+      const dc = -90 + (band + 0.5) * CELL, n = Math.max(1, Math.round(360 * Math.cos(dc * RAD) / CELL));
+      const lo0 = -j * 360 / n, lo1 = -(j + 1) * 360 / n, la0 = -90 + band * CELL, la1 = la0 + CELL, lm = (lo0 + lo1) / 2;
+      const ring = [[lo0, la0], [lm, la0], [lo1, la0], [lo1, la1], [lm, la1], [lo0, la1], [lo0, la0]];
+      let poly = {type: 'Polygon', coordinates: [ring]};
+      if (d3.geoArea(poly) > 2 * Math.PI) poly = {type: 'Polygon', coordinates: [ring.slice().reverse()]};
+      return {key, lon: lm, lat: dc, n: 0, nG: 0, nS: 0, fG: 0, fS: 0, poly, ring, dlon: 360 / n, idx: []};
+    }
+    fetch(`assets/sky_exposure.json?v=${CELL}`).then(r => r.ok ? r.json() : null).then(j => {
+      if (!j || j.cell !== CELL) return;   // made for another cell size: no rate view
+      EXP = j; $('.sky-metric').hidden = false;
+    }).catch(() => {});
 
     makeProj();
     new ResizeObserver(() => size()).observe(stage);

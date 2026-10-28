@@ -5,12 +5,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/site.css?v=34">
+<link rel="stylesheet" href="assets/site.css?v=36">
 <main>
+  <header class="hero">
   <p class="eyebrow" id="eyebrow">TESSELLATE &middot; TESS full-frame images</p>
   <h1>Stellar Flare Catalogue</h1>
   <p class="lede">Flares found by <strong>TESSELLATE</strong>, an untargeted search for transients across every TESS full-frame image, matched to their Gaia host stars. Every star has a page with its full TESSELLATE light curve, each flare's shape and classification, and where on the sky each flare came from.</p>
-  <div class="caveat" id="pilot" hidden></div>
+  </header>
   <div class="kpi" id="kpi"></div>
 
   <h2>Find a Star</h2>
@@ -39,8 +40,8 @@
   <div class="figs" id="figs">
     <figure id="skyfig"><img src="assets/fig_sky.png" alt="Sky positions of the flare stars"><figcaption id="cap_sky">Where the flare stars are on the sky.</figcaption></figure>
     <figure><img src="assets/fig_stack.png" alt="All simple flares stacked"><figcaption id="cap_stack">Simple flares stacked: time in units of each flare's decay half-time, flux relative to its peak frame, with the Davenport et al. (2014) template for comparison.</figcaption></figure>
-    <figure><img src="assets/fig_ed.png" alt="Distribution of flare energies"><figcaption id="cap_ed">Flare equivalent durations, simple and complex flares.</figcaption></figure>
-    <figure><img src="assets/fig_cmd.png" alt="Colour-magnitude diagram coloured by flare rate"><figcaption id="cap_cmd">Gaia colour&ndash;magnitude diagram of the flare stars, coloured by flare rate.</figcaption></figure>
+    <figure id="histfig"><img src="assets/fig_ed.png" alt="Distribution of flare energies"><figcaption id="cap_ed">Flare equivalent durations, simple and complex flares.</figcaption></figure>
+    <figure id="scatfig"><img src="assets/fig_cmd.png" alt="Colour-magnitude diagram coloured by flare rate"><figcaption id="cap_cmd">Gaia colour&ndash;magnitude diagram of the flare stars, coloured by flare rate.</figcaption></figure>
   </div>
 
   <h2>What Is on a Star Page</h2>
@@ -58,7 +59,8 @@
 <script src="assets/common.js?v=28"></script>
 <script src="assets/silver.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="assets/sky.js?v=32"></script>
+<script src="assets/sky.js?v=33"></script>
+<script src="assets/charts.js?v=8"></script>
 <script>
 const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
 let DATA = [], SILVER = null, sortKey = 'n', sortDir = -1;
@@ -95,27 +97,28 @@ document.getElementById('rand').addEventListener('click', () => {
 
 TF.summary().then(s => {
   const k = s.kpi;
-  const kp = [[k.stars.toLocaleString(), 'flare stars with a page'],
-              [k.flares.toLocaleString(), 'flares on those stars'],
+  // flaring sources = gold flare stars + silver sources (Hugh); flares with more than one component = complex flares
+  // (>= 1 significant extra component; frac_complex is their exact share of the gold stars' flares)
+  const nSil = k.silver_sources || 0, nMulti = Math.round(k.frac_complex * k.flares);
+  const kp = [[(k.stars + nSil).toLocaleString(), `flaring sources: ${k.stars.toLocaleString()} gold stars, ${nSil.toLocaleString()} silver`],
+              [k.flares.toLocaleString(), 'flares on the gold stars'],
               [k.gold.toLocaleString(), 'gold flares'],
-              [`${(100 * k.frac_complex).toFixed(0)}%`, 'of flares complex' + (k.frac_marginal != null ? `, ${(100 * k.frac_marginal).toFixed(0)}% marginal` : '') + ' (S/N dependent)'],
-              // components count each flare's main flare too (Hugh); comps_sig = significant extras only
-              k.comps_sig != null ? [(k.flares + k.comps_sig).toLocaleString(), `flare components, main flares included (+${k.comps_marg.toLocaleString()} marginal)`]
-                                  : [k.extra_peaks.toLocaleString(), 'extra peaks found, ' + k.extra_new.toLocaleString() + ' not in the detection catalogue'],
+              [nMulti.toLocaleString(), `flares with more than one component (${(100 * k.frac_complex).toFixed(0)}%; S/N dependent)`],
               [`${k.median_days.toFixed(0)} days`, 'median TESS coverage per star']]
     .concat(k.n_energy ? [[k.n_energy.toLocaleString(), 'flares with a TESS-band energy (Gaia distance)']] : [])
     .concat(k.median_dist ? [[`${k.median_dist.toFixed(0)} pc`, 'median distance (Gaia parallax)']] : []);
   document.getElementById('kpi').innerHTML = kp.map(([v, l]) => `<div><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
   document.getElementById('eyebrow').innerHTML = `TESSELLATE &middot; TESS sector${s.sectors.length > 1 ? 's' : ''} ${TF.ranges(s.sectors)}`;
-  if (s.pilot) { const p = document.getElementById('pilot'); p.innerHTML = s.pilot; p.hidden = false; }
   for (const [id, txt] of Object.entries(s.captions || {})) {
     if (id === 'cap_sky' && document.querySelector('#skyfig .sky')) continue;     // the interactive map writes its own
+    if ((id === 'cap_ed' || id === 'cap_cmd') && document.querySelector('.chart')) continue;   // so do the charts
     const el = document.getElementById(id); if (el) el.innerHTML = txt;
   }
   document.getElementById('build').textContent = `Built ${s.build}.`;
 });
 Promise.all([TF.index(), TFSilver.load().catch(() => [])]).then(([j, S]) => { DATA = j; SILVER = S; apply();
   const sky = j.concat(S.map(o => ({i: o.id, r: o.r, d: o.d, n: o.n, nk: o.k.length, sv: 1})));
-  if (typeof TFSky !== 'undefined') TFSky.init(document.getElementById('skyfig'), sky); }).catch(() => { hits.textContent = 'Could not load the catalogue index.'; });
+  if (typeof TFSky !== 'undefined') TFSky.init(document.getElementById('skyfig'), sky);
+  if (typeof TFCharts !== 'undefined') { TFCharts.hist(document.getElementById('histfig'), j); TFCharts.scatter(document.getElementById('scatfig'), j); } }).catch(() => { hits.textContent = 'Could not load the catalogue index.'; });
 </script>
 </html>
