@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/site.css?v=33">
+<link rel="stylesheet" href="assets/site.css?v=34">
 <main>
   <p class="eyebrow" id="eyebrow">TESSELLATE &middot; TESS full-frame images</p>
   <h1>Stellar Flare Catalogue</h1>
@@ -32,7 +32,8 @@
     <th>Sectors</th>
     <th id="sephead" hidden>Sep</th>
   </tr></thead><tbody id="rows"></tbody></table></div>
-  <p class="note" style="margin-top:12px"><a href="search.html"><strong>Browse the full catalogue &rarr;</strong></a> &mdash; every flare star, with filters and sorting.</p>
+  <div id="silverhits"></div>
+  <p class="note" style="margin-top:12px"><a href="search.html"><strong>Browse the full catalogue &rarr;</strong></a> &mdash; every flare star, with filters and sorting. <a href="silver.html"><strong>Silver sources &rarr;</strong></a> &mdash; confident flares without a single confident Gaia host.</p>
 
   <h2>The Population</h2>
   <div class="figs" id="figs">
@@ -54,12 +55,13 @@
 
   <footer>Also from TESSELLATE: <a href="https://cheerfuluser.github.io/tessellate_asteroid/">the asteroid rotation &amp; shape catalogue</a>. &middot; <span id="build"></span></footer>
 </main>
-<script src="assets/common.js?v=27"></script>
+<script src="assets/common.js?v=28"></script>
+<script src="assets/silver.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="assets/sky.js?v=31"></script>
+<script src="assets/sky.js?v=32"></script>
 <script>
 const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
-let DATA = [], sortKey = 'n', sortDir = -1;
+let DATA = [], SILVER = null, sortKey = 'n', sortDir = -1;
 const PREVIEW = 10;
 const LABEL = {i: 'Gaia ID', g: 'G', c: 'BP−RP', n: 'flares', x: 'complex flares', rt: 'flare rate', e: 'max ED', p: 'rotation period'};
 
@@ -71,6 +73,7 @@ function apply() {
   else if (list.length > PREVIEW) note = ` — the ${PREVIEW} ${sortDir > 0 ? 'lowest' : 'highest'} by ${LABEL[sortKey]}`;
   hits.textContent = `${list.length.toLocaleString()} of ${DATA.length.toLocaleString()} stars` + note;
   rows.innerHTML = list.slice(0, PREVIEW).map(o => TF.row(o)).join('');
+  if (SILVER) TFSilver.block(document.getElementById('silverhits'), SILVER, q.value);
 }
 function sortBy(th) {
   const k = th.dataset.k;
@@ -111,6 +114,8 @@ TF.summary().then(s => {
   }
   document.getElementById('build').textContent = `Built ${s.build}.`;
 });
-TF.index().then(j => { DATA = j; apply(); if (typeof TFSky !== 'undefined') TFSky.init(document.getElementById('skyfig'), j); }).catch(() => { hits.textContent = 'Could not load the catalogue index.'; });
+Promise.all([TF.index(), TFSilver.load().catch(() => [])]).then(([j, S]) => { DATA = j; SILVER = S; apply();
+  const sky = j.concat(S.map(o => ({i: o.id, r: o.r, d: o.d, n: o.n, nk: o.k.length, sv: 1})));
+  if (typeof TFSky !== 'undefined') TFSky.init(document.getElementById('skyfig'), sky); }).catch(() => { hits.textContent = 'Could not load the catalogue index.'; });
 </script>
 </html>

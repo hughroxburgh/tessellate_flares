@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Silver Sources — TESSELLATE Flare Catalogue</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css?v=34">
+<style>
+  table.cat td.w{min-width:110px}
+  .why{max-width:76ch}
+</style>
+<main class="wide" id="main">
+  <a class="home" href="index.html">&larr; Catalogue home</a>
+  <div id="list" hidden>
+    <p class="eyebrow">TESSELLATE flare catalogue &middot; second tier</p>
+    <h1 style="font-size:24px">Silver Sources</h1>
+    <div class="tabs" role="group" aria-label="Catalogue" style="margin:2px 0 12px"><a href="search.html"><button type="button" aria-pressed="false">Gold flare stars</button></a><a href="silver.html"><button type="button" aria-pressed="true">Silver sources</button></a></div>
+    <p class="note why">A silver source is a place on the sky with confident flares (p<sub>Flare</sub> &ge; 0.9) that cannot be pinned to a single Gaia star: usually two or more Gaia stars sit inside the flares' localisation regions and TESS's 21&Prime; pixels can't tell them apart, or flares sit near a single Gaia star without being confidently on it. A star that had a confident flare is also counted here, not as a gold flare star, when most of the flares at its position can't be pinned to it. Silver sources are catalogued like the flare stars &mdash; flares, light curves and measurements &mdash; except that the host is given as a list of candidate Gaia stars with their probabilities.</p>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Name, any candidate's Gaia DR3 ID, or RA Dec [radius&prime;]&hellip;" autocomplete="off" spellcheck="false">
+      <div class="filters">
+        <label><input type="checkbox" id="fmulti"> 2 or more flares</label>
+        <label>Kind <select id="fwhy"><option value="">any</option><option value="pair">unresolved pair</option><option value="group">unresolved group</option><option value="lone">one candidate</option></select></label>
+      </div>
+      <div id="hits"></div>
+    </div>
+    <div class="tablewrap"><table class="cat silver"><thead id="head"></thead><tbody id="rows"></tbody></table></div>
+  </div>
+
+</main>
+<script src="assets/common.js?v=28"></script>
+<script src="assets/silver.js?v=1"></script>
+<script>
+const $ = id => document.getElementById(id), P = new URLSearchParams(location.search);
+const C = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function list(S) {
+  $('list').hidden = false; $('head').innerHTML = TFSilver.head(false);
+  const q = $('q'); q.value = P.get('q') || '';
+  let shown = 0, VIEW = [];
+  function draw(reset) {
+    if (reset) { $('rows').innerHTML = ''; shown = 0; }
+    const nx = VIEW.slice(shown, shown + 300); shown += nx.length;
+    $('rows').insertAdjacentHTML('beforeend', nx.map(o => TFSilver.row(o)).join(''));
+  }
+  function apply() {
+    let {list, cone} = q.value.trim() ? TFSilver.match(S, q.value) : {list: S.slice().sort((a, b) => b.n - a.n || b.pm - a.pm), cone: null};
+    const w = $('fwhy').value;
+    list = list.filter(o => (!$('fmulti').checked || o.n >= 2) && (!w || o.why === w));
+    $('head').innerHTML = TFSilver.head(!!cone);
+    $('hits').textContent = `${list.length.toLocaleString()} of ${S.length.toLocaleString()} silver sources` + (cone ? ` within ${cone.r}′ of (${cone.ra}, ${cone.dec})` : '');
+    VIEW = list; draw(true);
+  }
+  q.addEventListener('input', apply); $('fmulti').addEventListener('change', apply); $('fwhy').addEventListener('change', apply);
+  addEventListener('scroll', () => { if (shown < VIEW.length && innerHeight + scrollY > document.body.offsetHeight - 600) draw(false); });
+  apply();
+}
+
+if (P.get('id')) location.replace(TF.starURL(P.get('id')));   // old links: the source's page is its star page
+TFSilver.load().then(S => list(S))
+  .catch(() => { $('list').hidden = false; $('hits') && ($('hits').textContent = 'Could not load the silver sources.'); });
+</script>
+</html>

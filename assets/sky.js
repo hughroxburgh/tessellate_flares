@@ -118,11 +118,20 @@ const TFSky = (() => {
     const stars = rows.filter(o => o.r != null && o.d != null);
     if (!stars.length) return false;
     const ramp = d3.interpolateRgbBasis(RAMP);
-    const cells = densityCells(stars), maxN = Math.max(...cells.map(c => c.n)), lmax = Math.log10(maxN + 1);
-    for (const c of cells) c.col = ramp(Math.log10(c.n + 1) / lmax);
+    const cells = densityCells(stars);
+    // two layers, gold flare stars (on) and silver sources (off); density counts the layers that are on
+    for (const c of cells) { c.nS = c.idx.reduce((a, i) => a + (stars[i].sv ? 1 : 0), 0); c.nG = c.n - c.nS; }
+    const LAYER = {g: true, s: false}, grey = d3.interpolateRgb('#3a3236', '#ece6e8');
+    let maxN = 1, lmax = 1;
+    function cellCols() {
+      const cnt = c => (LAYER.g ? c.nG : 0) + (LAYER.s ? c.nS : 0);
+      maxN = Math.max(1, ...cells.map(cnt)); lmax = Math.log10(maxN + 1);
+      for (const c of cells) { const n = cnt(c); c.col = n ? (LAYER.g ? ramp : grey)(Math.log10(n + 1) / lmax) : null; }
+    }
+    cellCols();
     for (const s of stars) {                 // dot colour (flare rate) and size (flares), once
       const lr = s.rt > 0 ? Math.log10(s.rt) : RATE_LO;
-      s._col = ramp(Math.max(0, Math.min(1, (lr - RATE_LO) / (RATE_HI - RATE_LO))));
+      s._col = s.sv ? '#d4cdcf' : ramp(Math.max(0, Math.min(1, (lr - RATE_LO) / (RATE_HI - RATE_LO))));
       s._r = Math.min(7, 2 + 1.1 * Math.sqrt(s.n || 1));
     }
     const css = getComputedStyle(document.documentElement), C = n => css.getPropertyValue(n).trim();
@@ -148,7 +157,7 @@ const TFSky = (() => {
       <div class="sky-key"><span class="sky-leg"></span><span class="sky-hint">drag &amp; zoom!</span></div>`;
     fig.insertBefore(wrap, fig.querySelector('figcaption'));
     const cap = fig.querySelector('figcaption');
-    if (cap) cap.innerHTML = `The ${stars.length.toLocaleString()} flare stars on the sky, seen from inside the celestial sphere ` +
+    if (cap) cap.innerHTML = `The ${stars.filter(s => !s.sv).length.toLocaleString()} flare stars (and, with the silver layer on, ${stars.filter(s => s.sv).length.toLocaleString()} silver sources) on the sky, seen from inside the celestial sphere ` +
       `(RA increases to the left; Galactic plane dashed). Zoomed out: how many stars fall in each ${CELL}° cell; ` +
       `zoomed in: each star, sized by its number of flares and coloured by its flare rate. Marked: open clusters (○), ` +
       `globular clusters (⊕), star-forming regions (◇) and nearby galaxies; more appear as you zoom in.`;
@@ -202,11 +211,17 @@ const TFSky = (() => {
       return ll;
     }
 
+    wrap.querySelector('.sky-leg').addEventListener('click', e => {
+      const b = e.target.closest('[data-l]'); if (!b) return;
+      LAYER[b.dataset.l] = !LAYER[b.dataset.l]; b.setAttribute('aria-pressed', LAYER[b.dataset.l]); cellCols(); draw();
+    });
     function legend(mix) {
       const g = `linear-gradient(90deg, ${RAMP.join(',')})`;
       $('.sky-leg').innerHTML = mix < 0.5
         ? `<span class="sky-ramp" style="background:${g}"></span>stars per ${CELL}° cell, 1&ndash;${maxN.toLocaleString()} (log)`
         : `<span class="sky-ramp" style="background:${g}"></span>flare rate, 10<sup>${RATE_LO}</sup>&ndash;1 per day (log)`;
+      $('.sky-leg').insertAdjacentHTML('afterbegin', [['g', 'gold flare stars', '#f0b35a'], ['s', 'silver sources', '#d4cdcf']]
+        .map(([k, t, c]) => `<button type="button" class="sky-chip" data-l="${k}" aria-pressed="${LAYER[k]}"><i style="background:${c}"></i>${t}</button>`).join(''));
       $('.sky-size').style.opacity = mix;                  // fades in with the dots
     }
 
@@ -343,6 +358,7 @@ const TFSky = (() => {
           if (!near(c) || (mode === 'globe' && d3.geoDistance([c.lon, c.lat], centre) > Math.PI / 2 + 0.05)) continue;
           const p = proj([c.lon, c.lat]);
           if (mode === 'moll' && p && (p[0] < -60 || p[0] > W + 60 || p[1] < -60 || p[1] > H + 60)) continue;
+          if (!c.col) continue;
           ctx.beginPath(); path(c.poly);
           ctx.fillStyle = c.col; ctx.fill(); ctx.strokeStyle = c.col; ctx.lineWidth = 0.6; ctx.stroke();
         }
@@ -361,6 +377,7 @@ const TFSky = (() => {
           if (!near(c)) continue;
           for (const i of c.idx) {
             const s = stars[i], ll = [-s.r, s.d];
+            if (s.sv ? !LAYER.s : !LAYER.g) continue;
             if (mode === 'globe' && d3.geoDistance(ll, centre) > Math.PI / 2) continue;
             const p = proj(ll); if (!p || p[0] < -10 || p[0] > W + 10 || p[1] < -10 || p[1] > H + 10) continue;
             ctx.fillStyle = s._col;
@@ -388,7 +405,9 @@ const TFSky = (() => {
     function showTip(q) {
       if (!q) { tip.hidden = true; return; }
       const s = stars[q[3]];
-      tip.innerHTML = `<b>Gaia DR3 ${TF.esc(s.i)}</b><br>RA ${TF.fmt(s.r, 4)}°, Dec ${TF.fmt(s.d, 4)}°<br>` +
+      if (s.sv) tip.innerHTML = `<b>Silver source ${TF.esc(s.i)}</b><br>RA ${TF.fmt(s.r, 4)}°, Dec ${TF.fmt(s.d, 4)}°<br>` +
+        `${s.nk} candidate Gaia host${s.nk === 1 ? '' : 's'}<br>${s.n} flare${s.n === 1 ? '' : 's'}`;
+      else tip.innerHTML = `<b>Gaia DR3 ${TF.esc(s.i)}</b><br>RA ${TF.fmt(s.r, 4)}°, Dec ${TF.fmt(s.d, 4)}°<br>` +
                       `G ${TF.fmt(s.g, 2)} &middot; BP&minus;RP ${TF.fmt(s.c, 2)}<br>${s.n} flare${s.n === 1 ? '' : 's'} &middot; ${TF.sig3(s.rt)} per day`;
       tip.hidden = false;
       const tw = tip.offsetWidth, th = tip.offsetHeight;

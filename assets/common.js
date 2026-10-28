@@ -14,8 +14,13 @@ const TF = (() => {
   const CLASS_LABEL = {simple: 'simple', marginal: 'marginal', complex: 'complex', possible: 'possible', shape: 'shape'};
   const tag = c => c ? `<span class="tag ${c}">${CLASS_LABEL[c] || c}</span>` : '&mdash;';
   // the data shard a star is in (build_site.shard_of must agree): digits 3-5 from the end (Gaia IDs end in a multiple of 4)
-  const shard = (id, n) => parseInt(String(id).slice(-5, -2), 10) % n;
-  const starURL = (id, prefix = '') => `${prefix}star.html?id=${id}`;
+  // silver sources (J-names) by a string hash (build_site.shard_of: the same arithmetic)
+  const shard = (id, n) => {
+    const s = String(id);
+    if (s[0] === 'J') { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 1000003; return h % n; }
+    return parseInt(s.slice(-5, -2), 10) % n;
+  };
+  const starURL = (id, prefix = '') => `${prefix}star.html?id=${encodeURIComponent(id)}`;
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   // site summary (KPIs, build id); always revalidated so a rebuild shows up immediately

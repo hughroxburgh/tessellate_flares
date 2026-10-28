@@ -206,3 +206,10 @@ table.sect.comp .sw{display:inline-block;width:16px;height:0;border-top:2.2px da
 .chart{position:relative;padding-bottom:15px}
 .chart .readout{position:absolute;right:10px;bottom:3px;font:11px "Azeret Mono",ui-monospace,monospace;color:var(--text-faint);pointer-events:none;white-space:nowrap}
 .nowrap{white-space:nowrap}
+
+/* silver sources: sky-map layer chips, the silver tag, candidate-host probability bars */
+.sky-chip{font:inherit;font-size:11px;color:var(--text-dim);background:var(--input-bg);border:1px solid var(--panel-border);border-radius:5px;padding:1px 7px;margin-right:6px;cursor:pointer}
+.sky-chip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:0}
+.sky-chip[aria-pressed="false"]{opacity:.45}
+.tag.silver{color:#cfc7c9;background:#cfc7c91a;border-color:#cfc7c94d}
+.wbar{display:inline-block;height:7px;border-radius:2px;background:#b9b1b3;vertical-align:1px;margin-right:6px}

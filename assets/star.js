@@ -5,7 +5,8 @@
   const CSS = getComputedStyle(document.documentElement);
   const C = name => CSS.getPropertyValue(name).trim();
   const P = new URLSearchParams(location.search);
-  const id = (P.get('id') || '').replace(/\D/g, '');
+  const raw = (P.get('id') || '').trim().replace(/ /g, '+');      // a '+' in a J-name arrives as a space unless encoded
+  const id = /^J/i.test(raw) ? raw.toUpperCase().replace(/[^J0-9.+\-_]/g, '') : raw.replace(/\D/g, '');   // silver: J-name
   const fmt = TF.fmt, sig3 = TF.sig3;
 
   function fail(msg) {
@@ -25,6 +26,8 @@
     return fail(`The data for Gaia DR3 <span class="mono">${TF.esc(id)}</span> could not be loaded (${TF.esc(e.message)}).`);
   }
   const EV = S.events;
+  const SILVER = S.kind === 'silver';                 // a silver source: no single confident Gaia host
+  const MAIN = new Set(['gold', 'ambiguous', 'silver']);   // shown without 'secondary flares' ticked
   const PERIODIC = S.sectors.some(s => s.p);       // baseline has a periodic (rotation) part to subtract separately
   // flux units: mJy (TESS band, each sector's own zero point) when every sector is calibrated, else e-/s -- never mixed
   const MJY = S.sectors.length > 0 && S.sectors.every(s => s.mjy != null);
@@ -46,8 +49,9 @@
     ev.w = {t: sc.t + lo * sc.dt, dt: sc.dt, r, e};
   }
   const MULTI = S.sectors.length > 1;
-  document.title = `Gaia DR3 ${S.id} — TESSELLATE Flare Catalogue`;
-  $('name').innerHTML = `Gaia DR3 <span class="mono">${S.id}</span>`;
+  document.title = `${SILVER ? 'Silver source ' : 'Gaia DR3 '}${S.id} — TESSELLATE Flare Catalogue`;
+  $('name').innerHTML = SILVER ? `<span class="mono">${S.id}</span> <span class="tag silver" style="vertical-align:4px">silver source</span>`
+                              : `Gaia DR3 <span class="mono">${S.id}</span>`;
   const sgn = v => (v >= 0 ? '+' : '&minus;') + Math.abs(v).toFixed(5);
   $('subtitle').innerHTML = `RA ${S.ra.toFixed(5)}&deg;, Dec ${sgn(S.dec)}&deg; &middot; ` +
     `${EV.length} flare${EV.length === 1 ? '' : 's'} in TESS sector${MULTI ? 's' : ''} ` +
@@ -56,7 +60,7 @@
   // ---------------- state ----------------
   let SEL = null, VIEW = null, OV = null, FC = null;
   const showSecondary = () => $('show2').checked;
-  const visible = () => EV.filter(e => showSecondary() || e.tier === 'gold');
+  const visible = () => EV.filter(e => showSecondary() || MAIN.has(e.tier));   // ambiguous / silver count as main
 
   // ---------------- info panel ----------------
   const FC_H = 320;            // flare chart height: with the detection rows under it, level with the stats beside it
@@ -72,7 +76,19 @@
   const PFIT = S.prot == null && S.baseline && S.baseline.periodic && S.baseline.P_fit != null ? S.baseline.P_fit : null;
   if (PFIT != null) rot = (S.prot_cand != null ? rot : 'none significant') +
     ` <span class="sub">(baseline fit uses ${PFIT.toFixed(3)} d)</span>`;
-  $('info').innerHTML =
+  // a silver source: its candidate Gaia hosts in place of the star's Gaia properties
+  const WHY = {pair: 'two Gaia stars fit the flare positions, neither confidently', group: 'three or more Gaia stars fit the flare positions',
+               lone: 'one Gaia star nearby, but the flares are not confidently on it'};
+  const silverHosts = () => `<p class="sec">Candidate hosts (Gaia DR3)</p>` +
+    `<table class="sect"><thead><tr><th>Gaia DR3</th><th><em>G</em></th><th>BP&minus;RP</th><th>Parallax (mas)</th><th>Probability</th></tr></thead><tbody>` +
+    (S.cands || []).map(k => `<tr><td><span class="mono">${TF.esc(k.i)}</span>` +
+      (k.gold ? `<br><a class="sub" href="${TF.starURL(k.i)}">a gold flare star</a>` : '') +
+      (k.dem ? '<br><span class="sub">not gold: ambiguous area</span>' : '') + (k.i === S.target ? '<br><span class="sub">light curve measured here</span>' : '') +
+      `</td><td>${fmt(k.G, 2)}</td><td>${fmt(k.c, 2)}</td><td>${fmt(k.plx, 2)}</td>` +
+      `<td><span class="wbar" style="width:${Math.round(50 * (k.w || 0))}px"></span>${fmt(k.w, 2)}</td></tr>`).join('') + '</tbody></table>' +
+    `<p class="hint">Probability: the chance this Gaia star is the host, averaged over the source's flares (a gold flare star needs &ge; 0.9).</p>` +
+    stat('Why silver', WHY[S.why] || TF.esc(S.why || '&mdash;'));
+  $('info').innerHTML = (SILVER ? silverHosts() :
     `<p class="sec">Star (Gaia DR3)</p>` +
     stat('<em>G</em>', fmt(S.G, 2)) +
     stat('BP &minus; RP', fmt(S.bprp, 2)) +
@@ -84,7 +100,7 @@
     stat('Absolute <em>G</em>', fmt(S.absG, 2)) +
     stat('T<sub>eff</sub> <span class="sub">(GSP-Phot)</span>', S.teff == null ? '&mdash;' : `${fmt(S.teff, 0)} K`) +
     stat('Tangential velocity', S.vtan == null ? '&mdash;' : `${fmt(S.vtan, 1)} km/s`) +
-    stat('RUWE', fmt(S.ruwe, 2) + (S.ruwe != null && S.ruwe > 1.4 ? ' <span class="sub">(&gt; 1.4: possible binary)</span>' : '')) +
+    stat('RUWE', fmt(S.ruwe, 2) + (S.ruwe != null && S.ruwe > 1.4 ? ' <span class="sub">(&gt; 1.4: possible binary)</span>' : ''))) +
     `<p class="sec">TESSELLATE</p>` +
     // one row per sector: where the star sits, its TESSELLATE objects there, its flares, its quiescent flux density
     `<table class="sect"><thead><tr><th>Sector</th><th>Camera</th><th>CCD</th><th>Cut</th><th>Object</th><th>Flares</th>` +
@@ -97,7 +113,8 @@
         (s.fq == null ? dash : `<td>${sig3(s.fq * KU.get(s.s))}</td>`) + '</tr>';
     }).join('') + '</tbody></table>' +
     stat('Observing time', `${fmt(S.obs_days, 1)} d`) +
-    stat('Flares', `${EV.length} <span class="sub">(${EV.filter(e => e.tier === 'gold').length} gold)</span>`) +
+    stat('Flares', `${EV.length} <span class="sub">(${SILVER ? EV.filter(e => e.tier === 'silver').length + ' confident'
+      : EV.filter(e => e.tier === 'gold').length + ' gold'}${EV.some(e => e.tier === 'ambiguous') ? `, ${EV.filter(e => e.tier === 'ambiguous').length} ambiguous` : ''})</span>`) +
     stat('Flare rate', `${fmt(S.rate, 3)} per day`) +
     stat('Complex flares', `${nComplex}` + (nExtra ? ` <span class="sub">(${nExtra} significant extra component${nExtra > 1 ? 's' : ''})</span>` : '')) +
     stat('Largest flare', ens.length ? `${sci(Math.max(...ens))} erg <span class="sub">(ED ${sig3(Math.max(...eds))} s)</span>`
@@ -106,7 +123,7 @@
     stat('Quiescent magnitude <span class="sub">(TESS band, AB)</span>', fmt(S.mag_t, 2)) +
     stat('Quiescent luminosity <span class="sub">(TESS band)</span>', S.Lq == null ? '&mdash;' : `${sci(S.Lq)} erg/s`) +
     `<div class="links"><a href="https://simbad.cds.unistra.fr/simbad/sim-coo?Coord=${S.ra}+${S.dec}&amp;Radius=10&amp;Radius.unit=arcsec" target="_blank" rel="noopener">SIMBAD</a>` +
-    `<a href="https://vizier.cds.unistra.fr/viz-bin/VizieR-4?-source=I/355/gaiadr3&amp;Source=${S.id}" target="_blank" rel="noopener">Gaia DR3 (VizieR)</a></div>`;
+    `<a href="https://vizier.cds.unistra.fr/viz-bin/VizieR-4?-source=I/355/gaiadr3&amp;${SILVER ? `-c=${S.ra}%20${S.dec}&amp;-c.rs=30` : `Source=${S.id}`}" target="_blank" rel="noopener">Gaia DR3 (VizieR)</a></div>`;
 
   // ---------------- sky (Aladin Lite) ----------------
   const SKY = {al: null, all: null, sel: null, shapes: new Map(), picked: 0};
@@ -140,7 +157,8 @@
     al.addOverlay(SKY.sel);
     const host = A.catalog({name: 'host star', color: C('--c-host'), sourceSize: 16, shape: 'circle'});
     al.addCatalog(host);
-    host.addSources([A.source(S.ra, S.dec, {name: `Gaia DR3 ${S.id}`})]);
+    host.addSources(SILVER ? (S.cands || []).filter(k => k.r != null).map(k => A.source(k.r, k.d, {name: `Gaia DR3 ${k.i}`}))
+                           : [A.source(S.ra, S.dec, {name: `Gaia DR3 ${S.id}`})]);
     SKY.al = al;
     // a click on a circle's outline: Aladin picks the shape itself -> select its flare
     const pick = o => {
@@ -361,6 +379,21 @@
     }
     ctx.restore();
   }
+  // flares of a silver source that lists this gold star as a candidate host (another star is the likelier host)
+  function shadeSilver(u, V) {
+    const M = S.silver || []; if (!M.length) return;
+    const ctx = u.ctx, top = u.bbox.top, h = u.bbox.height, dpr = devicePixelRatio || 1;
+    ctx.save(); clip(u); ctx.font = `${10 * dpr}px "Azeret Mono", monospace`; ctx.lineWidth = 1.2 * dpr;
+    for (const m of M) {
+      if (!V.segs.some(g => g.s === m.s)) continue;
+      const x = u.valToPos(toPlot(V, m.t, m.s), 'x', true);
+      ctx.fillStyle = 'rgba(212,205,207,0.10)'; ctx.fillRect(x - 3 * dpr, top, 6 * dpr, h);
+      ctx.setLineDash([4 * dpr, 3 * dpr]); ctx.strokeStyle = 'rgba(212,205,207,0.8)';
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + h); ctx.stroke();
+      ctx.fillStyle = 'rgba(212,205,207,0.9)'; ctx.fillText('silver', x + 4 * dpr, top + 12 * dpr);
+    }
+    ctx.restore();
+  }
   function drawOverview(V, keepRange) {
     const old = keepRange && OV && VIEW && VIEW.key === V.key ? [OV.scales.x.min, OV.scales.x.max] : null;
     VIEW = V;
@@ -383,7 +416,7 @@
                {stroke: `rgba(${C('--data-rgb')},0.55)`, width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
                {stroke: C('--c-flare'), width: 1.8, points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],   // flares
       cursor: CURSOR(2), legend: {show: false},
-      hooks: {drawClear: [u => shadeFlares(u, V, evs)], draw: [u => drawGaps(u, V)],
+      hooks: {drawClear: [u => shadeFlares(u, V, evs), u => shadeSilver(u, V)], draw: [u => drawGaps(u, V)],
               setCursor: [readout(el, 2, (x, f) => { const re = toReal(V, x);        // counts: this point's own sector
                 const c = MJY ? ` (${(f / KU.get(re.seg.s)).toFixed(1)} e⁻/s)` : '';
                 return `t = ${re.t.toFixed(4)}, f = ${fU(f)} ${UNIT}${c}`; })]},
@@ -668,7 +701,8 @@
       stat('Catalogue entr' + (ev.loc.length > 1 ? 'ies' : 'y'), ev.loc.map(L => `<span class="sub">${TF.esc(L.name)}</span>`).join('<br>') || '&mdash;') +
       stat('Peak frame', `MJD ${ev.tpk.toFixed(4)}<br><span class="sub">${TF.mjdToUTC(ev.tpk)} UTC</span>`) +
       stat('p<sub>Flare</sub> <span class="sub">(ML classifier)</span>', ev.loc.length ? ev.loc.map(L => fmt(L.p, 3)).join(', ') : '&mdash;') +
-      stat('Tier', ev.tier) +
+      stat('Tier', ev.amb ? `ambiguous position<br><span class="sub">host probability ${fmt(ev.amb.p, 2)} this star` +
+        (ev.amb.nb ? `, ${fmt(ev.amb.q, 2)} Gaia DR3 ${TF.esc(ev.amb.nb)}` : '') + '</span>' : ev.tier.replace('_', ' ')) +
       `<hr class="split">` +
       stat('Class', `${TF.tag(ev.cls)}`) +
       `<p class="hint" style="margin:2px 0 6px">${reason(ev)}</p>` +
@@ -762,7 +796,11 @@
   $('dl').innerHTML = `<a href="${blob}" download="gaia_dr3_${S.id}_flares.csv">This star's flares (CSV)</a>` +
     `<a href="${dataURL}" download="gaia_dr3_${S.id}.json.gz">Light-curve data behind this page (gzipped JSON: every 10-minute frame with its baseline and noise)</a>`;
 
-  if (!EV.some(e => e.tier !== 'gold')) $('show2wrap').hidden = true;
+  if ((S.silver || []).length) $('silvernote').innerHTML = ` Grey dashed lines: ${S.silver.length === 1 ? 'a flare' : S.silver.length + ' flares'} ` +
+    `in this light curve that ${S.silver.length === 1 ? 'is' : 'are'} catalogued with a silver source, because another Gaia star is the more likely host: ` +
+    S.silver.map(m => `<a href="${TF.starURL(m.id)}">${m.id}</a> (MJD ${m.t.toFixed(2)}; host probability ` +
+      `${fmt(m.q, 2)} this star, ${fmt(m.bq, 2)} Gaia DR3 ${TF.esc(m.best)})`).join('; ') + '.';
+  if (!EV.some(e => !MAIN.has(e.tier))) $('show2wrap').hidden = true;
   if (PERIODIC) {
     $('residlabel').textContent = ' subtract spline baseline';
     const Pb = S.prot != null ? S.prot : PFIT;

@@ -4,10 +4,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/site.css?v=33">
+<link rel="stylesheet" href="assets/site.css?v=34">
 <main class="wide">
   <a class="home" href="index.html">&larr; Catalogue home</a>
   <h1 style="font-size:24px">Browse the Flare Stars</h1>
+  <div class="tabs" role="group" aria-label="Catalogue" style="margin:2px 0 12px"><a href="search.html"><button type="button" aria-pressed="true">Gold flare stars</button></a><a href="silver.html"><button type="button" aria-pressed="false">Silver sources</button></a></div>
   <div class="toolbar">
     <input id="q" type="search" placeholder="Gaia DR3 ID, or RA Dec [radius&prime;] in degrees&hellip;" autocomplete="off" spellcheck="false">
     <div class="filters">
@@ -30,11 +31,13 @@
     <th>Sectors</th>
     <th id="sephead" hidden>Sep</th>
   </tr></thead><tbody id="rows"></tbody></table></div>
+  <div id="silverhits"></div>
 </main>
-<script src="assets/common.js?v=27"></script>
+<script src="assets/common.js?v=28"></script>
+<script src="assets/silver.js?v=1"></script>
 <script>
 const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
-let DATA = [], VIEW = [], sortKey = 'n', sortDir = -1, shown = 0, CONE = null;
+let DATA = [], VIEW = [], SILVER = null, sortKey = 'n', sortDir = -1, shown = 0, CONE = null;
 const CHUNK = 300;
 const $ = id => document.getElementById(id);
 
@@ -55,6 +58,7 @@ function apply() {
   const {list, cone} = TF.filterSort(DATA, q.value, sortKey, sortDir, extra);
   CONE = cone; $('sephead').hidden = !cone;
   VIEW = list; draw(true);
+  if (SILVER) TFSilver.block($('silverhits'), SILVER, q.value);
 }
 function sortBy(th) {
   const k = th.dataset.k;
@@ -102,6 +106,7 @@ TF.summary().then(s => {
   return TF.index();
 }).then(j => {
   DATA = j;
+  TFSilver.load().then(S => { SILVER = S; apply(); }).catch(() => {});
   const v = restoreState();
   apply();
   if (v && v.y) {
