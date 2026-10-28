@@ -28,6 +28,7 @@
   const EV = S.events;
   const SILVER = S.kind === 'silver';                 // a silver source: no single confident Gaia host
   const MAIN = new Set(['gold', 'ambiguous', 'silver']);   // shown without 'secondary flares' ticked
+  if (SILVER && $('hostkey')) $('hostkey').textContent = 'Teal: the candidate Gaia hosts (no single confident host).';
   const PERIODIC = S.sectors.some(s => s.p);       // baseline has a periodic (rotation) part to subtract separately
   // flux units: mJy (TESS band, each sector's own zero point) when every sector is calibrated, else e-/s -- never mixed
   const MJY = S.sectors.length > 0 && S.sectors.every(s => s.mjy != null);
@@ -351,6 +352,24 @@
     }
     ctx.restore();
   }
+  // flares narrower than a few pixels (zoomed out): uPlot clips the gaps either side of the flare series' short
+  // non-null run, which can erase it entirely -- draw those as a red stroke from their lowest to highest point
+  function drawNarrowFlares(u, V, evs) {
+    const X = u.data[0], R = u.data[3], dpr = devicePixelRatio || 1;
+    const lo = x => { let a = 0, b = X.length; while (a < b) { const m = (a + b) >> 1; if (X[m] < x) a = m + 1; else b = m; } return a; };
+    const ctx = u.ctx;
+    ctx.save(); clip(u); ctx.strokeStyle = C('--c-flare'); ctx.lineWidth = 1.8 * dpr; ctx.lineCap = 'round';
+    for (const e of evs) {
+      const half = e.w ? e.w.dt : 0, x0 = toPlot(V, e.start - half, e.s), x1 = toPlot(V, e.end + half, e.s);
+      if (x0 == null || u.valToPos(x1, 'x', true) - u.valToPos(x0, 'x', true) > 4 * dpr) continue;   // wide: the series shows it
+      let mn = Infinity, mx = -Infinity;
+      for (let i = lo(x0); i < X.length && X[i] <= x1; i++) if (R[i] != null) { mn = Math.min(mn, R[i]); mx = Math.max(mx, R[i]); }
+      if (!(mx >= mn)) continue;
+      const x = u.valToPos(toPlot(V, e.tpk, e.s), 'x', true);
+      ctx.beginPath(); ctx.moveTo(x, u.valToPos(mn, 'y', true)); ctx.lineTo(x, u.valToPos(mx, 'y', true)); ctx.stroke();
+    }
+    ctx.restore();
+  }
   // collapsed sector gaps: a faint band and a // break on the time axis (not between consecutive sectors, whose real
   // gap is shown); each sector's name at its start
   function drawGaps(u, V) {
@@ -416,7 +435,7 @@
                {stroke: `rgba(${C('--data-rgb')},0.55)`, width: 1, points: {size: 3, fill: C('--c-data'), stroke: C('--c-data')}},
                {stroke: C('--c-flare'), width: 1.8, points: {size: 4, fill: C('--c-flare'), stroke: C('--c-flare')}}],   // flares
       cursor: CURSOR(2), legend: {show: false},
-      hooks: {drawClear: [u => shadeFlares(u, V, evs), u => shadeSilver(u, V)], draw: [u => drawGaps(u, V)],
+      hooks: {drawClear: [u => shadeFlares(u, V, evs), u => shadeSilver(u, V)], draw: [u => drawGaps(u, V), u => drawNarrowFlares(u, V, evs)],
               setCursor: [readout(el, 2, (x, f) => { const re = toReal(V, x);        // counts: this point's own sector
                 const c = MJY ? ` (${(f / KU.get(re.seg.s)).toFixed(1)} e⁻/s)` : '';
                 return `t = ${re.t.toFixed(4)}, f = ${fU(f)} ${UNIT}${c}`; })]},
