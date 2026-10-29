@@ -60,6 +60,11 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--hairline);fon
 .ax-y{transform:translate(-50%,-50%) rotate(-90deg)}
 .chart-key{margin-top:4px;min-height:22px}
 .chart-key .axis-btn{position:static;transform:none;font-size:11.5px;color:var(--text-dim);padding:2px 6px 2px 0}
+/* histogram key: the split toggle (a .sky-chip) and, when on, the simple / complex legend */
+.chart-key .hist-split{margin-left:2px}
+.chart-key .hist-split[aria-pressed="true"]{color:var(--text);border-color:var(--accent);background:var(--accent-bg);opacity:1}
+.hist-leg{font-size:11.5px;color:var(--text-dim)}
+.hist-leg i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin:0 5px 0 10px}
 .axis-menu{position:absolute;z-index:4;min-width:190px;max-height:300px;overflow-y:auto;background:var(--panel);
   border:1px solid var(--panel-border);border-radius:8px;padding:4px;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 .axis-menu .am-g{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);padding:6px 8px 2px}
@@ -97,6 +102,17 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--hairline);fon
 .figs figure{margin:0;background:var(--fig-bg);border:1px solid var(--panel-border);border-radius:9px;padding:10px}
 .figs img{width:100%;height:auto;border-radius:5px;display:block}
 .figs figcaption{font-size:11.5px;color:var(--text-dim);margin-top:7px;line-height:1.45}
+/* short caption + (i) bubble (TF.cap): the bubble floats over the figure, so nothing moves when it opens */
+.figs figure{position:relative;display:flex;flex-direction:column}
+/* a static figure (the stacked flares) sits centred in whatever height its row's taller panel gives it, so the
+   captions of a row line up at the bottom */
+.figs figure > img{margin:auto 0}
+.info{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;margin-left:3px;padding:0;
+  border:1px solid var(--text-faint);border-radius:50%;background:none;color:var(--text-dim);cursor:pointer;
+  font:italic 600 10px/1 Georgia,"Times New Roman",serif;vertical-align:1px}
+.info:hover,.info[aria-expanded="true"]{color:var(--text);border-color:var(--accent)}
+.info-pop{position:absolute;left:10px;right:10px;z-index:5;background:var(--panel);border:1px solid var(--panel-border);
+  border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.55;color:var(--text-dim);box-shadow:0 6px 20px rgba(0,0,0,.5)}
 /* interactive sky map (sky.js) */
 .sky{position:relative}
 .sky-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;font-size:11.5px}
@@ -104,11 +120,15 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--hairline);fon
 .sky-tools button:hover{color:var(--text);border-color:var(--accent)}
 .sky-tools .seg{display:inline-flex}
 .sky-tools .seg button:first-child{border-radius:6px 0 0 6px}
-.sky-tools .seg button:last-child{border-radius:0 6px 6px 0;border-left:0}
+.sky-tools .seg button:last-child{border-radius:0 6px 6px 0;margin-left:-1px}
+.sky-tools .seg button{position:relative}
+.sky-tools .seg button:hover,.sky-tools .seg button[aria-pressed="true"]{z-index:1}
 .sky-tools .seg button[aria-pressed="true"]{background:var(--accent-bg);color:var(--text);border-color:var(--accent)}
 .sky-btns{margin-left:auto;display:inline-flex;gap:6px}
 .sky-btns button{border-radius:6px}
-.sky-coord{font-family:"Azeret Mono",ui-monospace,monospace;font-size:11px;color:var(--text-dim);white-space:pre}
+.sky-coord{position:absolute;left:6px;bottom:6px;pointer-events:none;font-family:"Azeret Mono",ui-monospace,monospace;
+  font-size:11px;color:var(--text-dim);white-space:pre;background:rgba(19,6,9,.78);border-radius:5px;padding:2px 6px}
+.sky-coord:empty{display:none}
 .sky-stage{position:relative}
 .sky canvas{width:100%;display:block;cursor:grab;touch-action:pan-y}
 .sky-tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;

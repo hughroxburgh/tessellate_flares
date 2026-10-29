@@ -5,10 +5,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/site.css?v=39">
+<link rel="stylesheet" href="assets/site.css?v=43">
 <main>
   <header class="hero">
-  <p class="eyebrow" id="eyebrow">TESSELLATE &middot; TESS full-frame images</p>
+  <p class="eyebrow" id="eyebrow">TESS full-frame images</p>
   <h1>TESSELLATE Stellar Flare Catalogue</h1>
   <p class="lede">Flares found by <strong>TESSELLATE</strong>, an untargeted search for transients across every TESS full-frame image, matched to their Gaia host stars. Every star has a page with its full TESSELLATE light curve, each flare's shape and classification, and where on the sky each flare came from.</p>
   </header>
@@ -34,12 +34,12 @@
     <th id="sephead" hidden>Sep</th>
   </tr></thead><tbody id="rows"></tbody></table></div>
   <div id="silverhits"></div>
-  <p class="note" style="margin-top:12px"><a href="search.html"><strong>Browse the full catalogue &rarr;</strong></a> &mdash; every flare star, with filters and sorting. <a href="silver.html"><strong>Silver sources &rarr;</strong></a> &mdash; confident flares without a single confident Gaia host.</p>
+  <p class="note" style="margin-top:12px;max-width:none;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 24px"><span><a href="search.html"><strong>Browse the full catalogue &rarr;</strong></a> &mdash; every flare star, with filters and sorting.</span> <span><a href="silver.html"><strong>Silver sources &rarr;</strong></a> &mdash; confident flares without a single confident Gaia host.</span></p>
 
   <h2>The Population</h2>
   <div class="figs" id="figs">
     <figure id="skyfig"><img src="assets/fig_sky.png" alt="Sky positions of the flare stars"><figcaption id="cap_sky">Where the flare stars are on the sky.</figcaption></figure>
-    <figure><img src="assets/fig_stack.png" alt="All simple flares stacked"><figcaption id="cap_stack">Simple flares stacked: time in units of each flare's decay half-time, flux relative to its peak frame, with the Davenport et al. (2014) template for comparison.</figcaption></figure>
+    <figure><img src="assets/fig_stack.png" alt="All simple flares stacked"><figcaption id="cap_stack">Simple flares stacked: time in units of each flare's decay half-time, flux relative to its peak frame, with the Davenport et al. (2014) and Mendoza et al. (2022) templates for comparison.</figcaption></figure>
     <figure id="histfig"><img src="assets/fig_ed.png" alt="Distribution of flare energies"><figcaption id="cap_ed">Flare equivalent durations, simple and complex flares.</figcaption></figure>
     <figure id="scatfig"><img src="assets/fig_cmd.png" alt="Colour-magnitude diagram coloured by flare rate"><figcaption id="cap_cmd">Gaia colour&ndash;magnitude diagram of the flare stars, coloured by flare rate.</figcaption></figure>
   </div>
@@ -51,16 +51,17 @@
   <p class="note"><strong>Detection.</strong> TESSELLATE (<a href="https://ui.adsabs.harvard.edu/abs/2025AJ....170..186R/abstract">Roxburgh &amp; Ridden-Harper et al. 2025</a>) searches difference images built by TESSreduce (<a href="https://arxiv.org/abs/2111.15006">Ridden-Harper et al. 2021</a>) for every transient in the TESS full-frame images, without a target list. Events are classified by a machine-learning model; a <em>gold</em> flare has a flare probability of at least 0.9 and a single Gaia star inside its 3&sigma; localisation region, and the flare stars here are the hosts of gold flares.</p>
   <p class="note"><strong>Localisation.</strong> Each flare's position comes from a PSF fit to the difference image. The circles on the star pages are each flare's 3&sigma; region (three times the fitted 1&sigma; per-axis error, on TESS's 21&Prime; pixels) &mdash; the region used to match flares to Gaia stars, so a gold flare has exactly one Gaia star inside its circle.</p>
   <p class="note"><strong>Light curves.</strong> Photometry is a forced PSF fit at the Gaia position. The baseline is one least-squares fit per orbit: a smooth spline for slow trends plus, where the star rotates and the data ask for it, a rotation signal whose shape may evolve slowly; flares are excluded by iterative one-sided clipping. Noise is the local robust scatter within &plusmn;1 day, with a correction for correlated noise.</p>
-  <p class="note"><strong>Flare shapes.</strong> Each flare is modelled as a main flare &mdash; a rise into a power-law or double-exponential decay, whichever the data prefer &mdash; plus any extra components. A neural network trained on synthetic flares injected into real TESSELLATE light curves proposes where components are; each is then fitted with one flexible shape (a rise into an exponential decay), with everything averaged over the 10-minute exposure. A component is kept if it improves the fit by &Delta;&chi;&sup2; &gt; 10 and counts as significant above 20; on synthetic flares with known truth, about 4.5% of flares gain a false significant component. A flare is <span class="tag complex">complex</span> with at least one significant component, <span class="tag marginal">marginal</span> with only marginal ones, and otherwise <span class="tag simple">simple</span>. Each component's delay, amplitude, width and share of the flare's flux are listed on the star pages. Faint components are hard to see at 10-minute cadence, so the complex fraction rises with signal-to-noise; compare samples at matched brightness.</p>
+  <p class="note"><strong>Completeness.</strong> Flares are detected in the difference images (the image plane), not in the light curves, so a flare can be missed where subtraction artefacts, such as residuals around bright or saturated stars, scattered light or a poor reference image, hide it or break up its detection. Flare counts and rates are therefore lower limits. A brightening in a star's light curve that is not marked as a flare may be one of these missed detections, but it may also be a cosmic ray, a blend with a neighbouring star, or an event the classifier did not accept as a confident flare.</p>
+  <p class="note"><strong>Flare shapes.</strong> Flares are modelled in the formalism of <a href="https://ui.adsabs.harvard.edu/abs/2022AJ....164...17M/abstract">Mendoza et al. (2022)</a>: the light curve is a Gaussian heating pulse convolved with exponential cooling. The main flare is a Gaussian convolved with two exponential decays, a fast one and a slow one whose share is fitted, which gives both the sharp peak and the long tail; each extra component is a Gaussian convolved with a single exponential. A neural network trained on synthetic flares injected into real TESSELLATE light curves proposes where components are, and everything is averaged over the 10-minute exposure before fitting. A component is kept if it improves the fit by &Delta;&chi;&sup2; &gt; 10 and counts as significant above 20; on synthetic flares with known truth, about 4.5% of flares gain a false significant component. A flare is <span class="tag complex">complex</span> with at least one significant component, <span class="tag marginal">marginal</span> with only marginal ones, and otherwise <span class="tag simple">simple</span>. Each component's delay, amplitude, width and share of the flare's flux are listed on the star pages. Faint components are hard to see at 10-minute cadence, so the complex fraction rises with signal-to-noise; compare samples at matched brightness.</p>
   <p class="note" id="downloads"><strong>Data.</strong> <a href="data/tables/stars.csv.gz">Stars (CSV.gz)</a> &middot; <a href="data/tables/flares.csv.gz">Flares (CSV.gz)</a> &middot; <a href="data/tables/peaks.csv.gz">Flare peaks (CSV.gz)</a>. Each star's light-curve data can be downloaded from its page.</p>
 
   <footer>Also from TESSELLATE: <a href="https://cheerfuluser.github.io/tessellate_asteroid/">the asteroid rotation &amp; shape catalogue</a>. &middot; <span id="build"></span></footer>
 </main>
-<script src="assets/common.js?v=28"></script>
+<script src="assets/common.js?v=29"></script>
 <script src="assets/silver.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
-<script src="assets/sky.js?v=33"></script>
-<script src="assets/charts.js?v=8"></script>
+<script src="assets/sky.js?v=35"></script>
+<script src="assets/charts.js?v=10"></script>
 <script>
 const rows = document.getElementById('rows'), hits = document.getElementById('hits'), q = document.getElementById('q');
 let DATA = [], SILVER = null, sortKey = 'n', sortDir = -1;
@@ -113,12 +114,14 @@ TF.summary().then(s => {
   document.getElementById('kpi').innerHTML =
     `<div class="head">${panel(k.stars, nSil, 'unique flaring sources', 'gold quality', 'silver quality')}${panel(k.flares, nSilF, 'documented flares', 'on gold stars', 'on silver sources')}</div>
      <div class="minor">${minor.map(([v, l]) => `<span><b>${v}</b> ${l}</span>`).join('')}</div>`;
-  document.getElementById('eyebrow').innerHTML = `TESSELLATE &middot; TESS sector${s.sectors.length > 1 ? 's' : ''} ${TF.ranges(s.sectors)}`;
+  document.getElementById('eyebrow').innerHTML = `TESS sector${s.sectors.length > 1 ? 's' : ''} ${TF.ranges(s.sectors)}`;
   for (const [id, txt] of Object.entries(s.captions || {})) {
     if (id === 'cap_sky' && document.querySelector('#skyfig .sky')) continue;     // the interactive map writes its own
     if ((id === 'cap_ed' || id === 'cap_cmd') && document.querySelector('.chart')) continue;   // so do the charts
     const el = document.getElementById(id); if (el) el.innerHTML = txt;
   }
+  const st = document.getElementById('cap_stack');     // short caption; the full text (built or static) in the (i) bubble
+  TF.cap(st, 'Simple flares stacked on a common time and flux scale.', st.innerHTML);
   document.getElementById('build').textContent = `Built ${s.build}.`;
 });
 Promise.all([TF.index(), TFSilver.load().catch(() => [])]).then(([j, S]) => { DATA = j; SILVER = S; apply();

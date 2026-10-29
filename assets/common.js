@@ -124,6 +124,46 @@ const TF = (() => {
     }
     return out.join(', ');
   }
+  // figure caption: a short line, plus an (i) button whose bubble holds the rest. The bubble floats over the bottom of
+  // the figure, so opening it moves nothing; hover / focus shows it, a click pins it, a click elsewhere or Esc closes.
+  // Safe to call on every redraw: an open bubble stays open with the new text.
+  function cap(el, short, more) {
+    if (!el) return;
+    const fig = el.closest('figure') || el.parentNode;
+    let pop = fig.querySelector(':scope > .info-pop');
+    if (!more) { el.innerHTML = short; if (pop) pop.remove(); return; }
+    if (!pop) {
+      pop = document.createElement('div'); pop.className = 'info-pop'; pop.hidden = true; pop.setAttribute('role', 'note');
+      fig.appendChild(pop);
+      pop.addEventListener('mouseenter', () => clearTimeout(pop._t));
+      pop.addEventListener('mouseleave', () => pop._hide());
+    }
+    pop.innerHTML = more;
+    const open = !pop.hidden;
+    el.innerHTML = `${short} <button type="button" class="info" aria-label="More about this figure" aria-expanded="${open}">i</button>`;
+    const btn = el.querySelector('.info');
+    pop._show = () => {
+      clearTimeout(pop._t); pop.hidden = false; btn.setAttribute('aria-expanded', 'true');
+      pop.style.bottom = `${fig.clientHeight - el.offsetTop + 6}px`;      // just above the caption
+    };
+    pop._hide = (now) => {
+      if (pop._pinned && !now) return;
+      clearTimeout(pop._t);
+      pop._t = setTimeout(() => { pop.hidden = true; pop._pinned = false; btn.setAttribute('aria-expanded', 'false'); }, now ? 0 : 150);
+    };
+    if (open) pop._show();
+    btn.addEventListener('mouseenter', pop._show);
+    btn.addEventListener('mouseleave', () => pop._hide());
+    btn.addEventListener('focus', pop._show);
+    btn.addEventListener('blur', () => pop._hide());
+    btn.addEventListener('click', e => { e.stopPropagation(); pop._pinned = !pop._pinned; pop._pinned ? pop._show() : pop._hide(true); });
+    if (!cap._wired) {                                   // one document listener closes pinned bubbles
+      cap._wired = true;
+      const closeAll = t => document.querySelectorAll('.info-pop:not([hidden])').forEach(p => { if (!p.contains(t)) p._hide(true); });
+      document.addEventListener('click', e => closeAll(e.target));
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAll(null); });
+    }
+  }
   // catalogue table row (home + browse)
   function row(o, prefix = '') {
     return `<tr><td><a href="${starURL(o.i, prefix)}" class="mono">${o.i}</a></td>` +
@@ -133,5 +173,5 @@ const TF = (() => {
       (o.sep != null ? `<td>${fmt(o.sep, 2)}&prime;</td>` : '') + `</tr>`;
   }
   return {fmt, int, sig3, tag, shard, starURL, esc, summary, index, getGz, getStar, parseCone, sepArcmin,
-          mjdToUTC, filterSort, row, ranges};
+          mjdToUTC, filterSort, row, ranges, cap};
 })();

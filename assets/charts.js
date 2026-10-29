@@ -28,9 +28,7 @@ const TFCharts = (() => {
     A: {l: 'amplitude (peak / quiescent flux)', log: true},
     S: {l: 'peak signal-to-noise', log: true},
     T: {l: 'decay half-time (min)', log: true},
-    R: {l: 'rise time (min)', log: true},
-    C: {l: 'components per flare', int: true},
-  };
+  };                                       // (rise time R and components C are in the file but not offered: Hugh)
   const css = () => getComputedStyle(document.documentElement);
   const BOX = (W, H) => ({x: 62, y: 10, w: W - 74, h: H - 62});    // plot area inside the canvas
 
@@ -132,27 +130,30 @@ const TFCharts = (() => {
     };
   }
   const caret = t => `${t} <span class="caret" aria-hidden="true">▾</span>`;
-  const starList = () => Object.entries(STAR).map(([k, q]) => ['s:' + k, q.l]);
+  const HIST_SKIP = new Set(['N']);        // star quantities the histogram doesn't offer (flares on the star: Hugh)
+  const starList = () => Object.entries(STAR).filter(([k]) => !HIST_SKIP.has(k)).map(([k, q]) => ['s:' + k, q.l]);
 
   // ---------------- histogram ----------------
   function hist(fig, rows) {
     if (typeof d3 === 'undefined' || !fig) return;
     let FL = null, key = 's:RT', logY = false, touched = false;   // flare quantities appear once flares_lite.json is in
-    const F = frame(fig, 0.62, false), cap = fig.querySelector('figcaption');
+    let split = true;                                    // all, plus simple (blue) and complex (red) as their own lines
+    const F = frame(fig, 0.8, true), cap = fig.querySelector('figcaption');   // same shape as the scatter, so a row matches
     const groups = () => (FL ? [['Flares', Object.entries(FLARE).map(([k, q]) => ['f:' + k, q.l])]] : []).concat([['Stars', starList()]]);
     function draw() {
       const {ctx, W, H} = F.fresh();
       const [kind, k] = key.split(':'), q = kind === 'f' ? FLARE[k] : STAR[k];
-      let vals, sub;                                     // all values; the highlighted subset (complex)
-      if (kind === 'f') { vals = FL.cols[k]; sub = FL.cols.X.map((x, i) => x === 2 ? vals[i] : null); }
-      else { vals = rows.map(q.f); sub = rows.map((o, i) => o.x > 0 ? vals[i] : null); }
+      let vals, sub, simp;                               // all values; the complex and simple subsets
+      if (kind === 'f') { vals = FL.cols[k]; sub = FL.cols.X.map((x, i) => x === 2 ? vals[i] : null);
+                          simp = FL.cols.X.map((x, i) => x === 0 ? vals[i] : null); }
+      else { vals = rows.map(q.f); sub = rows.map((o, i) => o.x > 0 ? vals[i] : null); simp = rows.map((o, i) => o.x > 0 ? null : vals[i]); }
       const [lo, hi, out] = clip(vals, q.int);
       const nb = q.int ? Math.min(60, hi - lo + 1) : Math.max(20, Math.min(60, Math.round(W / 12)));
       const edges = q.int ? d3.range(nb + 1).map(i => lo - 0.5 + i) : d3.range(nb + 1).map(i => lo + (hi - lo) * i / nb);
       const count = arr => { const c = new Array(nb).fill(0);
         for (const v of arr) { if (v == null || v < edges[0] || v > edges[nb]) continue; c[Math.min(nb - 1, Math.floor((v - edges[0]) / (edges[1] - edges[0])))]++; }
         return c; };
-      const ca = count(vals), cs = count(sub);
+      const ca = count(vals), cs = count(sub), cp = count(simp);
       const box = BOX(W, H);
       const xs = d3.scaleLinear([edges[0], edges[nb]], q.inv ? [box.x + box.w, box.x] : [box.x, box.x + box.w]);
       const top = Math.max(1, ...ca);
@@ -170,18 +171,25 @@ const TFCharts = (() => {
       };
       const C = css();
       step(ca, C.getPropertyValue('--c-data').trim(), 1.5, `rgba(${C.getPropertyValue('--data-rgb').trim()},0.16)`);
-      step(cs, C.getPropertyValue('--c-complex').trim(), 1.8);
+      const cSim = C.getPropertyValue('--c-simple').trim(), cCx = C.getPropertyValue('--c-complex').trim();
+      if (split) { step(cp, cSim, 1.6); step(cs, cCx, 1.8); }
       const what = kind === 'f' ? 'flares' : 'stars';
       F.setX(caret(q.l)); F.setY(caret(logY ? `${what} (log)` : what)); F.place(box);
-      const nAll = vals.filter(v => v != null).length, nSub = sub.filter(v => v != null).length;
-      cap.innerHTML = `${q.l[0].toUpperCase() + q.l.slice(1)} of ${nAll.toLocaleString()} ${what} ` +
-        `(<span style="color:var(--c-complex)">${kind === 'f' ? 'complex flares' : 'stars with a complex flare'}: ${nSub.toLocaleString()}</span>)` +
-        (out ? `; ${out.toLocaleString()} outside the range shown (more than ${K_SIG}&sigma; from the median).` : '.') +
-        ' Click the axis labels to change them.';
+      const nAll = vals.filter(v => v != null).length, nSub = sub.filter(v => v != null).length, nSim = simp.filter(v => v != null).length;
+      const subL = kind === 'f' ? 'complex flares' : 'stars with a complex flare', simL = kind === 'f' ? 'simple flares' : 'stars without one';
+      F.wrap.querySelector('.chart-key').innerHTML = (`<button type="button" class="sky-chip hist-split" aria-pressed="${split}">split simple / complex</button>` +
+        (split ? `<span class="hist-leg"><i style="background:${cSim}"></i>${simL}<i style="background:${cCx}"></i>${subL}</span>` : ''));   // replaces the unused key button
+      TF.cap(cap, `${q.l[0].toUpperCase() + q.l.slice(1)} of ${nAll.toLocaleString()} ${what}` +
+        (split ? `; <span style="color:${cSim}">${simL}</span> and <span style="color:${cCx}">${subL}</span> drawn separately.` : '.'),
+        (split ? `${simL[0].toUpperCase() + simL.slice(1)}: ${nSim.toLocaleString()}; ${subL}: ${nSub.toLocaleString()}` +
+                 (kind === 'f' ? ' (marginal flares count only in the total).' : '.') : '') +
+        (out ? ` ${out.toLocaleString()} ${what} lie outside the range shown (more than ${K_SIG}&sigma; from the median).` : '') +
+        ' Click the axis labels to change what is plotted; the button under the chart turns the simple / complex split on or off.');
     }
     F.btn('.ax-x').addEventListener('click', e => F.menu(e.currentTarget, groups(), key, v => { key = v; touched = true; draw(); }));
     F.btn('.ax-y').addEventListener('click', e => F.menu(e.currentTarget, [[null, [['lin', 'linear counts'], ['log', 'log counts']]]],
       logY ? 'log' : 'lin', v => { logY = v === 'log'; draw(); }));
+    F.wrap.querySelector('.chart-key').addEventListener('click', e => { if (e.target.closest('.hist-split')) { split = !split; draw(); } });
     draw();
     new ResizeObserver(() => draw()).observe(F.stage);
     let asked = false;
@@ -236,9 +244,9 @@ const TFCharts = (() => {
       F.setKey(qc ? `<span class="sky-ramp" style="background:linear-gradient(90deg, ${RAMP.join(',')})"></span>` +
         caret(`colour: ${qc.l}, ${fv(c0)}&ndash;${fv(c1)}${qc.log ? ' (log)' : ''}`) : caret('colour: none'));
       const out = rows.length - order.length;
-      cap.innerHTML = `${order.length.toLocaleString()} flare stars` + (qc ? `, coloured by ${qc.l}` : '') +
-        (out ? `; ${out.toLocaleString()} without both values or outside the ranges shown (more than ${K_SIG}&sigma; from the median).` : '.') +
-        ' Click the axis labels or the colour key to change them.';
+      TF.cap(cap, `${order.length.toLocaleString()} flare stars` + (qc ? `, coloured by ${qc.l}.` : '.'),
+        (out ? `${out.toLocaleString()} stars lack one of the values or lie outside the ranges shown (more than ${K_SIG}&sigma; from the median). ` : '') +
+        'Click the axis labels or the colour key to change what is plotted.');
     }
     F.btn('.ax-x').addEventListener('click', e => F.menu(e.currentTarget, list(), kx, v => { kx = v; draw(); }));
     F.btn('.ax-y').addEventListener('click', e => F.menu(e.currentTarget, list(), ky, v => { ky = v; draw(); }));

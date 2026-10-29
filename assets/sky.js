@@ -4,7 +4,7 @@
 // exposure from assets/sky_exposure.json, made by FlareStars/code/sky_exposure.py) -- so 100k stars stay readable;
 // zoomed in, each star is a dot sized
 // by its number of flares and coloured by its flare rate -- hover for details, click to open its page. The grid is
-// labelled in degrees and the cursor's RA / Dec is shown above the map; "Expand" opens it nearly full screen.
+// labelled in degrees and the cursor's RA / Dec is shown in the map's bottom-left corner; "Expand" opens it nearly full screen.
 // Needs d3 v7 (index.html loads it from cdnjs) and common.js (TF).
 const TFSky = (() => {
   const RAD = Math.PI / 180;
@@ -172,18 +172,26 @@ const TFSky = (() => {
     wrap.innerHTML = `<div class="sky-tools">
         <div class="seg sky-proj" role="group" aria-label="Projection"><button type="button" data-p="moll" aria-pressed="true">Mollweide</button><button type="button" data-p="globe" aria-pressed="false">Globe</button></div>
         <div class="seg sky-metric" role="group" aria-label="Density map shows" hidden><button type="button" data-m="stars" aria-pressed="true">Stars</button><button type="button" data-m="rate" aria-pressed="false" title="Flares per square degree per day of TESS observation: the observing time divided out">Flares / deg² / day</button></div>
-        <span class="sky-coord" aria-live="off"></span>
         <span class="sky-btns"><button type="button" class="sky-reset">Reset</button><button type="button" class="sky-exp" aria-pressed="false">Expand</button></span>
       </div>
       <div class="sky-stage"><canvas role="img" aria-label="Interactive map of the flare stars on the sky"></canvas><div class="sky-tip" hidden></div>
+        <span class="sky-coord" aria-live="off"></span>
         <div class="sky-size" aria-hidden="true">dot size = total number of detected flares</div></div>
       <div class="sky-key"><span class="sky-leg"></span><span class="sky-hint">drag &amp; zoom!</span></div>`;
     fig.insertBefore(wrap, fig.querySelector('figcaption'));
     const cap = fig.querySelector('figcaption');
-    if (cap) cap.innerHTML = `The ${stars.filter(s => !s.sv).length.toLocaleString()} flare stars (and, with the silver layer on, ${stars.filter(s => s.sv).length.toLocaleString()} silver sources) on the sky, seen from inside the celestial sphere ` +
-      `(RA increases to the left; Galactic plane dashed). Zoomed out: how many stars fall in each ${CELL}° cell, or (Flares / deg² / day) the flares in each cell divided by its area and by how long TESS observed it, which takes out the extra coverage near the ecliptic poles; ` +
-      `zoomed in: each star, sized by its number of flares and coloured by its flare rate. Marked: open clusters (○), ` +
-      `globular clusters (⊕), star-forming regions (◇) and nearby galaxies; more appear as you zoom in.`;
+    // caption: names the layers that are on (redrawn when a layer chip is toggled)
+    const nGold = stars.filter(s => !s.sv).length, nSilv = stars.length - nGold;
+    function capSky() {
+      const on = [LAYER.g && `${nGold.toLocaleString()} flare stars`, LAYER.s && `${nSilv.toLocaleString()} silver sources`].filter(Boolean);
+      TF.cap(cap, on.length ? `The ${on.join(' and ')} on the sky. Zoom in to see individual sources; click one to open its page.`
+                            : 'Both layers are off: turn on the gold flare stars or the silver sources below the map.',
+        `The sky is seen from inside the celestial sphere ` +
+        `(RA increases to the left; Galactic plane dashed). Zoomed out: how many sources fall in each ${CELL}° cell, or (Flares / deg² / day) the flares in each cell divided by its area and by how long TESS observed it, which takes out the extra coverage near the ecliptic poles; ` +
+        `zoomed in: each source, sized by its number of flares and coloured by its flare rate (silver sources in grey). Marked: open clusters (○), ` +
+        `globular clusters (⊕), star-forming regions (◇) and nearby galaxies; more appear as you zoom in.`);
+    }
+    capSky();
     const $ = s => wrap.querySelector(s);
     const canvas = $('canvas'), ctx = canvas.getContext('2d'), tip = $('.sky-tip'), stage = $('.sky-stage');
     const gal = galacticPlane();
@@ -236,7 +244,7 @@ const TFSky = (() => {
 
     wrap.querySelector('.sky-leg').addEventListener('click', e => {
       const b = e.target.closest('[data-l]'); if (!b) return;
-      LAYER[b.dataset.l] = !LAYER[b.dataset.l]; b.setAttribute('aria-pressed', LAYER[b.dataset.l]); cellCols(); redraw();
+      LAYER[b.dataset.l] = !LAYER[b.dataset.l]; b.setAttribute('aria-pressed', LAYER[b.dataset.l]); cellCols(); redraw(); capSky();
     });
     function legend(mix) {
       const g = `linear-gradient(90deg, ${RAMP.join(',')})`;
