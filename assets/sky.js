@@ -202,9 +202,16 @@ const TFSky = (() => {
     const rotM = [0, 0];                  // Mollweide rotation [lambda, phi]: drag sideways turns the sky in RA, up/down
                                           // tilts it in Dec (an oblique Mollweide); Reset gives the standard map back
 
+    // d3 fills a cell inside-out (the whole sky) when one of its corners lies on the map's seam / the globe's horizon
+    // to within d3's tolerance (~1e-6 rad) -- which happens at round rotations (Reset, a straight up/down drag, a tilt
+    // pinned at +-90 deg): nudge the rotation off the cell grid by an invisible SEAM (deg), and keep the tilt off the poles
+    const SEAM = 1e-3;
+    const tilt = p => Math.max(-89.99, Math.min(89.99, p)) + SEAM;
+    const rotOf = () => mode === 'moll' ? [rotM[0] + SEAM, tilt(rotM[1]), 0] : [rot[0] + SEAM, tilt(rot[1]), rot[2] || 0];
+
     function makeProj() {
-      proj = mode === 'moll' ? d3.geoProjection(mollweideRaw).rotate([rotM[0], rotM[1], 0]).precision(0.3)
-                             : d3.geoOrthographic().clipAngle(90).precision(0.3).rotate(rot);
+      proj = mode === 'moll' ? d3.geoProjection(mollweideRaw).rotate(rotOf()).precision(0.3)
+                             : d3.geoOrthographic().clipAngle(90).precision(0.3).rotate(rotOf());
       path = d3.geoPath(proj, ctx);
     }
 
@@ -219,7 +226,7 @@ const TFSky = (() => {
       S0 = mode === 'moll' ? Math.min(W / (4 * Math.SQRT2), H / (2 * Math.SQRT2)) * 0.97 : Math.min(W, H) / 2 - 6;
       zoom.translateExtent(mode === 'moll' ? [[0, 0], [W, H]] : [[-Infinity, -Infinity], [Infinity, Infinity]]).extent([[0, 0], [W, H]]);
       if (keep) {                          // same zoom, same sky position at the centre, in the new canvas's pixels
-        const p1 = d3.geoProjection(mollweideRaw).rotate([rotM[0], rotM[1], 0]).scale(S0).translate([W / 2, H / 2])(keep);
+        const p1 = d3.geoProjection(mollweideRaw).rotate(rotOf()).scale(S0).translate([W / 2, H / 2])(keep);
         T = d3.zoomIdentity.translate(W / 2 - T.k * p1[0], H / 2 - T.k * p1[1]).scale(T.k);
         d3.select(canvas).property('__zoom', T);
       }
@@ -228,8 +235,8 @@ const TFSky = (() => {
 
     // the current view: Mollweide pans and zooms the flat map; the globe zooms about its centre and rotates (rot)
     function place() {
-      if (mode === 'moll') proj.scale(S0 * T.k).translate([T.x + T.k * W / 2, T.y + T.k * H / 2]).rotate([rotM[0], rotM[1], 0]);
-      else proj.scale(S0 * T.k).translate([W / 2, H / 2]).rotate(rot);
+      if (mode === 'moll') proj.scale(S0 * T.k).translate([T.x + T.k * W / 2, T.y + T.k * H / 2]).rotate(rotOf());
+      else proj.scale(S0 * T.k).translate([W / 2, H / 2]).rotate(rotOf());
       K = T.k;
     }
     function onMap(x, y) {                 // the sky position under a screen point, or null off the map
