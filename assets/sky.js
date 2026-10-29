@@ -393,24 +393,40 @@ const TFSky = (() => {
         // the cell is cut by the map's edge (Mollweide: the projected cell is far wider than it can be) or the
         // globe's horizon -- drawing every cell through d3's resampling and clipping was most of the lag
         ctx.globalAlpha = 1 - mix;
-        const sc = proj.scale(), edge = Math.PI / 2 - 2.2 * CELL * RAD;
+        // globe: judged by the cell's corners, not its centre -- the cells near the poles are far wider in RA than
+        // CELL, so a corner can be over the horizon (and fold back onto the disc) while the centre is well inside.
+        // The sky outline (disc / Mollweide ellipse) is also the canvas clip, so nothing drawn here spills past it.
+        const sc = proj.scale(), H90 = Math.PI / 2;
+        ctx.save();
+        ctx.beginPath(); path({type: 'Sphere'}); ctx.clip();
+        const turn = mode === 'moll' ? d3.geoRotation(proj.rotate()) : null;
         for (const c of allCells) {
           if (!c.col || !near(c)) continue;
-          const dc = mode === 'globe' ? d3.geoDistance([c.lon, c.lat], centre) : 0;
-          if (dc > Math.PI / 2 + 0.05) continue;
-          const pts = dc > edge ? null : c.ring.map(q => proj(q));
+          let inside = true;
+          if (mode === 'globe') {
+            let d0 = Infinity, d1 = -Infinity;
+            for (const q of c.ring) { const d = d3.geoDistance(q, centre); d0 = Math.min(d0, d); d1 = Math.max(d1, d); }
+            if (d0 > H90 && d3.geoDistance([c.lon, c.lat], centre) > H90) continue;   // all of it behind
+            inside = d1 < H90 - 0.02;
+          }
+          const pts = inside ? c.ring.map(q => proj(q)) : null;
           let fast = pts && pts.every(Boolean);
           if (fast) {
             let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
             for (const q of pts) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
             if (x1 < -10 || x0 > W + 10 || y1 < -10 || y0 > H + 10) continue;          // off screen
-            if (mode === 'moll' && x1 - x0 > 1.4 * c.dlon * RAD * sc + 4) fast = false; // split by the map edge
+            if (mode === 'moll') {                           // split by the map edge? (tilted map: the edge isn't
+              let l0 = Infinity, l1 = -Infinity;               // vertical, so test the corners in the map's own frame)
+              for (const q of c.ring) { const l = turn(q)[0]; l0 = Math.min(l0, l); l1 = Math.max(l1, l); }
+              if (l1 - l0 > 180 || x1 - x0 > 1.4 * c.dlon * RAD * sc + 4) fast = false;
+            }
           }
           ctx.beginPath();
           if (fast) { ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); }
           else path(c.poly);
           ctx.fillStyle = c.col; ctx.fill(); ctx.strokeStyle = c.col; ctx.lineWidth = 0.6; ctx.stroke();
         }
+        ctx.restore();
         ctx.globalAlpha = 1;
       }
       grid();
