@@ -1,0 +1,73 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<title>Flare Star — TESSELLATE Flare Catalogue</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/site.css?v=43">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
+<main class="wide star" id="main">
+  <a class="home" href="index.html">&larr; Catalogue</a>
+  <p class="eyebrow">TESSELLATE flare star</p>
+  <h1 id="name">Loading&hellip;</h1>
+  <p class="note" id="subtitle" style="margin:0"></p>
+
+  <div class="toprow">
+    <section class="panel" id="info" aria-label="Star properties"></section>
+    <section class="panel skypanel" aria-label="Sky view">
+      <div id="aladin"></div>
+      <p class="hint">Red circles: the 3&sigma; localisation region of each flare (a gold flare has exactly one Gaia star inside its circle); click one to select that flare. Selected flare in bold. <span id="hostkey">Teal: the Gaia host star.</span> Grey: other Gaia DR3 sources. Scroll to zoom, drag to pan.</p>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Light curve">
+    <div class="lchead">
+      <p class="sec" style="margin:0">TESSELLATE light curve</p>
+      <div class="tabs" id="tabs" role="group" aria-label="Sector"></div>
+      <div class="toggles">
+        <label class="toggle" id="show2wrap"><input type="checkbox" id="show2"> show secondary &amp; recovered flares</label>
+        <label class="toggle"><input type="checkbox" id="showbase" checked> show baseline</label>
+        <label class="toggle" id="subperwrap" title="The baseline's rotation part"><input type="checkbox" id="subper"> subtract periodic baseline</label>
+        <label class="toggle" title="The baseline's slow trend (with no rotation term, the whole baseline)"><input type="checkbox" id="resid"><span id="residlabel"> subtract baseline</span></label>
+      </div>
+    </div>
+    <div id="overview" class="chart"></div>
+    <p class="hint">Every 10-minute frame; flares in red over gold bands (click one to inspect it below). Drag across the plot to zoom in time, double-click to zoom back out. In the all-sectors view consecutive sectors keep their real gap; longer gaps (missing sectors) are removed and marked //.<span id="spikenote"></span><span id="silvernote"></span></p>
+  </section>
+
+  <section class="panel" aria-label="Selected flare">
+    <div class="lchead">
+      <p class="sec" style="margin:0" id="ftitle">Flare</p>
+      <div class="toggles">
+        <label class="toggle" title="The fitted model: the main flare (cobalt), significant extra components (gold dashed) and marginal ones (faint gold dotted)"><input type="checkbox" id="showfeat"> show components</label>
+        <label class="toggle" title="Flux left after the fitted model (main flare + significant components), in units of each frame's noise"><input type="checkbox" id="subfit"> subtract model</label>
+        <label class="toggle" title="Model curves at full time resolution (instantaneous), not averaged over each 10-min exposure"><input type="checkbox" id="hires" checked> full time resolution</label>
+      </div>
+    </div>
+    <div class="flaregrid">
+      <div>
+        <div id="flarechart" class="chart"></div>
+        <div id="fcomp" class="fcomp"></div>
+      </div>
+      <div id="fstats"></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Flares on this star">
+    <p class="sec">Flares on this star</p>
+    <div class="tablewrap"><table class="cat" id="ftable"></table></div>
+    <p class="hint" id="fhidden"></p>
+    <p class="hint">Times are MJD at the brightest 10-minute frame. ED: equivalent duration, the flare's energy in seconds of the star's quiescent output in the TESS band. Gold flares: p<sub>Flare</sub> &ge; 0.9, confidently matched to this star. Secondary flares: other flares (p<sub>Flare</sub> 0.6&ndash;0.9) confidently matched to it. Recovered flares: events the classifier called Unsure or Variable (often a flare on a rotation maximum) that pass a flare check on this star&rsquo;s light curve with the rotation removed.</p>
+  </section>
+
+  <section class="panel" aria-label="Downloads">
+    <p class="sec">Downloads</p>
+    <div class="dl" id="dl"></div>
+  </section>
+
+  <footer>TESSELLATE flare star catalogue &middot; <a href="index.html">home</a> &middot; <a href="search.html">browse all stars</a></footer>
+</main>
+<script src="assets/common.js?v=29"></script>
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js"></script>
+<script src="assets/star.js?v=50"></script>
+</html>
