@@ -69,10 +69,28 @@ footer{margin-top:48px;padding-top:14px;border-top:1px solid var(--hairline);fon
 .axis-menu button[aria-selected="true"]{color:var(--accent)}
 
 /* headline numbers */
-.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 30px}
-.kpi > div{background:var(--panel);border:1px solid var(--panel-border);border-radius:9px;padding:14px 16px}
-.kpi .v{font-family:"Azeret Mono",ui-monospace,monospace;font-size:21px;font-variant-numeric:tabular-nums}
-.kpi .l{font-size:11.5px;color:var(--text-dim);margin-top:3px;line-height:1.35}
+/* home-page statistics (Hugh, 2026-10-29: option C): two centred headline panels, each with a gold/silver
+   quality bar, then the secondary stats as pills */
+.kpi{margin:0 0 30px}
+.kpi .head{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+.kpi .head > div{width:340px;max-width:100%;text-align:center;background:var(--panel);
+  border:1px solid var(--panel-border);border-radius:9px;padding:16px 18px}
+.kpi .v{font-family:"Azeret Mono",ui-monospace,monospace;font-size:30px;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:15px;font-weight:500;color:var(--text-dim);margin-top:2px}
+.kpi .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--hairline);margin-top:12px}
+.kpi .bar i{display:block}
+.kpi .bar .g{background:rgb(var(--gold-rgb))}
+.kpi .bar .s{background:#cfc7c9;opacity:.75}
+.kpi .barlab{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--text-dim);margin-top:6px}
+.kpi .barlab span{white-space:nowrap}
+.kpi .barlab b{font-family:"Azeret Mono",ui-monospace,monospace;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi .barlab .g b{color:rgb(var(--gold-rgb))}
+.kpi .barlab .s b{color:#cfc7c9}
+.kpi .minor{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
+.kpi .minor span{font-size:13px;color:var(--text-dim);background:var(--panel);border:1px solid var(--panel-border);
+  border-radius:999px;padding:6px 14px}
+.kpi .minor b{font-family:"Azeret Mono",ui-monospace,monospace;font-weight:500;color:var(--text);font-variant-numeric:tabular-nums;
+  margin-right:5px}
 
 /* figures */
 .figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px}

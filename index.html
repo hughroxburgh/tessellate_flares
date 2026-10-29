@@ -1,15 +1,15 @@
 <!doctype html><html lang="en"><meta charset="utf-8">
-<title>TESSELLATE Flare Star Catalogue</title>
+<title>TESSELLATE Stellar Flare Catalogue</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Stellar flares found in TESS full-frame images by the TESSELLATE transient search, with every flare star's TESSELLATE light curve.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Azeret+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="assets/site.css?v=36">
+<link rel="stylesheet" href="assets/site.css?v=39">
 <main>
   <header class="hero">
   <p class="eyebrow" id="eyebrow">TESSELLATE &middot; TESS full-frame images</p>
-  <h1>Stellar Flare Catalogue</h1>
+  <h1>TESSELLATE Stellar Flare Catalogue</h1>
   <p class="lede">Flares found by <strong>TESSELLATE</strong>, an untargeted search for transients across every TESS full-frame image, matched to their Gaia host stars. Every star has a page with its full TESSELLATE light curve, each flare's shape and classification, and where on the sky each flare came from.</p>
   </header>
   <div class="kpi" id="kpi"></div>
@@ -97,17 +97,22 @@ document.getElementById('rand').addEventListener('click', () => {
 
 TF.summary().then(s => {
   const k = s.kpi;
-  // flaring sources = gold flare stars + silver sources (Hugh); flares with more than one component = complex flares
-  // (>= 1 significant extra component; frac_complex is their exact share of the gold stars' flares)
-  const nSil = k.silver_sources || 0, nMulti = Math.round(k.frac_complex * k.flares);
-  const kp = [[(k.stars + nSil).toLocaleString(), `flaring sources: ${k.stars.toLocaleString()} gold stars, ${nSil.toLocaleString()} silver`],
-              [k.flares.toLocaleString(), 'flares on the gold stars'],
-              [k.gold.toLocaleString(), 'gold flares'],
-              [nMulti.toLocaleString(), `flares with more than one component (${(100 * k.frac_complex).toFixed(0)}%; S/N dependent)`],
-              [`${k.median_days.toFixed(0)} days`, 'median TESS coverage per star']]
-    .concat(k.n_energy ? [[k.n_energy.toLocaleString(), 'flares with a TESS-band energy (Gaia distance)']] : [])
-    .concat(k.median_dist ? [[`${k.median_dist.toFixed(0)} pc`, 'median distance (Gaia parallax)']] : []);
-  document.getElementById('kpi').innerHTML = kp.map(([v, l]) => `<div><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+  // headline panels (Hugh, 2026-10-29): flaring sources = gold stars + silver sources, documented flares = flares on
+  // both, each with a gold/silver quality bar; complex flares (>= 1 significant extra component) are of the gold
+  // stars' flares only (frac_complex is their exact share)
+  const f = x => Math.round(x).toLocaleString();
+  const nSil = k.silver_sources || 0, nSilF = k.silver_flares || 0, nMulti = Math.round(k.frac_complex * k.flares);
+  const panel = (g, sv, l, gl, sl) => { const p = 100 * g / (g + sv);
+    return `<div><div class="v">${f(g + sv)}</div><div class="l">${l}</div>
+      <div class="bar" aria-hidden="true"><i class="g" style="width:${p}%"></i><i class="s" style="width:${100 - p}%"></i></div>
+      <div class="barlab"><span class="g"><b>${f(g)}</b> ${gl}</span><span class="s"><b>${f(sv)}</b> ${sl}</span></div></div>`; };
+  const minor = [[f(nMulti), `complex flares (${(100 * k.frac_complex).toFixed(1)}%)`],
+                 [`${k.median_days.toFixed(0)} d`, 'median TESS baseline']]
+    .concat(k.median_dist ? [[`${k.median_dist.toFixed(0)} pc`, 'median Gaia distance']] : [])
+    .concat(k.n_energy ? [[f(k.n_energy), 'flares with an energy']] : []);
+  document.getElementById('kpi').innerHTML =
+    `<div class="head">${panel(k.stars, nSil, 'unique flaring sources', 'gold quality', 'silver quality')}${panel(k.flares, nSilF, 'documented flares', 'on gold stars', 'on silver sources')}</div>
+     <div class="minor">${minor.map(([v, l]) => `<span><b>${v}</b> ${l}</span>`).join('')}</div>`;
   document.getElementById('eyebrow').innerHTML = `TESSELLATE &middot; TESS sector${s.sectors.length > 1 ? 's' : ''} ${TF.ranges(s.sectors)}`;
   for (const [id, txt] of Object.entries(s.captions || {})) {
     if (id === 'cap_sky' && document.querySelector('#skyfig .sky')) continue;     // the interactive map writes its own
